@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
 All colors MUST be HSL.
 */
 
@@ -39,19 +39,12 @@ All colors MUST be HSL.
     --radius: 0.5rem;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
@@ -94,6 +87,62 @@ All colors MUST be HSL.
   }
 }
 
+/* ── Color Palettes ──────────────────────────────────────────────
+   data-palette is set on <html> by AppContext when a palette is active.
+   Only --primary and --primary-foreground are overridden; everything
+   else (card, background, etc.) inherits from the base or dark theme.
+──────────────────────────────────────────────────────────────── */
+
+/* Forest — default green palette */
+[data-palette="forest"],
+:root:not([data-palette]) {
+  --primary: 152 44% 34%;
+  --primary-foreground: 0 0% 98%;
+  --ring: 152 44% 34%;
+}
+[data-palette="forest"].dark,
+.dark:not([data-palette]) {
+  --primary: 152 44% 55%;
+  --primary-foreground: 152 20% 10%;
+  --ring: 152 44% 55%;
+}
+
+/* Pastel Pink */
+[data-palette="pink"] {
+  --primary: 340 55% 55%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 340 55% 55%;
+}
+[data-palette="pink"].dark {
+  --primary: 340 60% 65%;
+  --primary-foreground: 340 10% 10%;
+  --ring: 340 60% 65%;
+}
+
+/* Steel Blue */
+[data-palette="blue"] {
+  --primary: 210 65% 42%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 210 65% 42%;
+}
+[data-palette="blue"].dark {
+  --primary: 210 70% 60%;
+  --primary-foreground: 210 10% 10%;
+  --ring: 210 70% 60%;
+}
+
+/* Monochrome */
+[data-palette="mono"] {
+  --primary: 0 0% 15%;
+  --primary-foreground: 0 0% 98%;
+  --ring: 0 0% 15%;
+}
+[data-palette="mono"].dark {
+  --primary: 0 0% 90%;
+  --primary-foreground: 0 0% 10%;
+  --ring: 0 0% 90%;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -102,4 +151,13 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
