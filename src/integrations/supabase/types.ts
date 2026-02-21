@@ -14,8 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      coach_relationships: {
+        Row: {
+          created_at: string
+          id: string
+          initiated_by: string
+          status: string
+          student_id: string
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          initiated_by: string
+          status?: string
+          student_id: string
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          initiated_by?: string
+          status?: string
+          student_id?: string
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pending_plans: {
+        Row: {
+          created_at: string
+          id: string
+          plan_data: Json
+          status: string
+          student_id: string
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          plan_data?: Json
+          status?: string
+          student_id: string
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          plan_data?: Json
+          status?: string
+          student_id?: string
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          active_role: string | null
           avatar_url: string | null
           created_at: string
           display_name: string | null
@@ -25,6 +86,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_role?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
@@ -34,12 +96,34 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_role?: string | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
           updated_at?: string
           use_case?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
           user_id?: string
         }
         Relationships: []
@@ -156,15 +240,50 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      lookup_referral_code: {
+        Args: { _code: string }
+        Returns: {
+          display_name: string
+          has_teacher_role: boolean
+          user_id: string
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "teacher" | "student" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -291,6 +410,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "teacher", "student", "user"],
+    },
   },
 } as const

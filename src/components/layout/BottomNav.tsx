@@ -1,16 +1,25 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Timer, Calendar, BarChart3, Settings } from 'lucide-react';
-
-const tabs = [
-  { path: '/', icon: Timer, label: 'Timer' },
-  { path: '/planning', icon: Calendar, label: 'Planlama' },
-  { path: '/analytics', icon: BarChart3, label: 'Analiz' },
-  { path: '/settings', icon: Settings, label: 'Ayarlar' },
-];
+import { Timer, Calendar, BarChart3, Settings, Users } from 'lucide-react';
+import { useApp } from '@/context/AppContext';
 
 export const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { activeRole, hasRole } = useApp();
+
+  const isTeacherMode = activeRole === 'teacher' && hasRole('teacher');
+
+  const tabs = isTeacherMode
+    ? [
+        { path: '/', icon: Users, label: 'Öğrenciler' },
+        { path: '/settings', icon: Settings, label: 'Ayarlar' },
+      ]
+    : [
+        { path: '/', icon: Timer, label: 'Timer' },
+        { path: '/planning', icon: Calendar, label: 'Planlama' },
+        { path: '/analytics', icon: BarChart3, label: 'Analiz' },
+        { path: '/settings', icon: Settings, label: 'Ayarlar' },
+      ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50">
@@ -18,7 +27,8 @@ export const BottomNav = () => {
         <div className="bg-card rounded-t-2xl shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.1)] border-t border-border">
           <div className="flex justify-around items-center h-16 px-2">
             {tabs.map(tab => {
-              const isActive = location.pathname === tab.path;
+              const isActive = location.pathname === tab.path ||
+                (tab.path === '/' && location.pathname.startsWith('/student/'));
               return (
                 <button
                   key={tab.path}

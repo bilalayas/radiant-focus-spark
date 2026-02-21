@@ -1,20 +1,27 @@
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
+import { useProfile } from '@/hooks/useProfile';
+import { useAuth } from '@/hooks/useAuth';
 import { GraduationCap, BookOpen, Sparkles, Compass } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const options = [
   { id: 'exam', label: 'Sınav Hazırlığı', icon: GraduationCap },
-  { id: 'university', label: 'Üniversite', icon: BookOpen },
+  { id: 'university', label: 'Üniversite (YKS)', icon: BookOpen },
   { id: 'productivity', label: 'Genel Üretkenlik', icon: Sparkles },
   { id: 'free', label: 'Serbest Kullanım', icon: Compass },
 ];
 
 export default function OnboardingPage() {
   const { updateSettings } = useApp();
+  const { user } = useAuth();
+  const { updateProfile } = useProfile(user);
   const navigate = useNavigate();
 
-  const handleSelect = (useCase: string) => {
+  const handleSelect = async (useCase: string) => {
+    // Save to Supabase profile
+    await updateProfile({ use_case: useCase });
+    // Also update local settings
     updateSettings({ onboardingDone: true, useCase });
     navigate('/', { replace: true });
   };

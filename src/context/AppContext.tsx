@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
-import { Task, Session, AppSettings, defaultSettings } from '@/types';
+import { AppSettings, defaultSettings } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { useProfile } from '@/hooks/useProfile';
+import { useSupabaseTasks } from '@/hooks/useSupabaseTasks';
+import { useSupabaseSessions } from '@/hooks/useSupabaseSessions';
+import { useSupabaseCompletions } from '@/hooks/useSupabaseCompletions';
+import { useRoles } from '@/hooks/useRoles';
+import { useCoach } from '@/hooks/useCoach';
+import type { Task, Session } from '@/types';
+import type { AppRole } from '@/hooks/useRoles';
+import type { CoachRelationship } from '@/hooks/useCoach';
 
 export interface TimerState {
   elapsed: number;
@@ -35,6 +45,28 @@ interface AppContextType {
   clearAllData: () => void;
   exportData: () => string;
   taskExists: (name: string) => boolean;
+  // Auth & Profile
+  user: ReturnType<typeof useAuth>['user'];
+  authLoading: boolean;
+  profile: ReturnType<typeof useProfile>['profile'];
+  updateProfile: ReturnType<typeof useProfile>['updateProfile'];
+  // Roles
+  roles: AppRole[];
+  hasRole: (role: AppRole) => boolean;
+  activeRole: string;
+  setActiveRole: (role: string) => void;
+  // Coach
+  referralCode: string | null;
+  coachRelationships: CoachRelationship[];
+  pendingRequests: CoachRelationship[];
+  acceptedStudents: CoachRelationship[];
+  acceptedTeachers: CoachRelationship[];
+  sendCoachRequest: ReturnType<typeof useCoach>['sendRequest'];
+  respondToCoachRequest: ReturnType<typeof useCoach>['respondToRequest'];
+  lookupReferralCode: ReturnType<typeof useCoach>['lookupCode'];
+  refetchCoach: () => void;
+  // Sessions for other users (teacher)
+  fetchSessionsForUser: ReturnType<typeof useSupabaseSessions>['fetchSessionsForUser'];
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -49,10 +81,36 @@ function load<T>(key: string, def: T): T {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [tasks, setTasks] = useState<Task[]>(() => load('app_tasks', []));
-  const [sessions, setSessions] = useState<Session[]>(() => load('app_sessions', []));
-  const [completions, setCompletions] = useState<Record<string, boolean>>(() => load('app_completions', {}));
+  const { user, loading: authLoading } = useAuth();
+  const { profile, updateProfile } = useProfile(user);
+  const { roles, hasRole } = useRoles(user);
+  const { 
+    referralCode, relationships: coachRelationships, pendingRequests,
+    acceptedStudents, acceptedTeachers,
+    sendRequest: sendCoachRequest, respondToRequest: respondToCoachRequest,
+    lookupCode: lookupReferralCode, refetch: refetchCoach,
+  } = useCoach(user);
+
+  // Supabase-backed data
+  const { tasks: sbTasks, addTask: sbAddTask, updateTask: sbUpdateTask, deleteTask: sbDeleteTask, getTasksForDate: sbGetTasksForDate, addTaskToDate: sbAddTaskToDate } = useSupabaseTasks();
+  const { sessions: sbSessions, addSession: sbAddSession, getSessionsForDate: sbGetSessionsForDate, fetchSessionsForUser } = useSupabaseSessions();
+  const { completions, isTaskCompleted, setTaskCompleted, toggleTaskCompletion } = useSupabaseCompletions();
+
   const [settings, setSettings] = useState<AppSettings>(() => ({ ...defaultSettings, ...load('app_settings', defaultSettings) }));
+
+  // Active role from profile
+  const [activeRole, setActiveRoleState] = useState<string>(profile?.active_role || 'student');
+
+  useEffect(() => {
+    if (profile?.active_role) setActiveRoleState(profile.active_role);
+  }, [profile?.active_role]);
+
+  const setActiveRole = useCallback(async (role: string) => {
+    setActiveRoleState(role);
+    if (user) {
+      await updateProfile({ active_role: role } as any);
+    }
+  }, [user, updateProfile]);
 
   // Timer state - timestamp-based so it survives page refreshes
   const [timerRunning, setTimerRunning] = useState(() => load('timer_running', false));
@@ -160,9 +218,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     formatTime,
   };
 
-  useEffect(() => localStorage.setItem('app_tasks', JSON.stringify(tasks)), [tasks]);
-  useEffect(() => localStorage.setItem('app_sessions', JSON.stringify(sessions)), [sessions]);
-  useEffect(() => localStorage.setItem('app_completions', JSON.stringify(completions)), [completions]);
   useEffect(() => {
     localStorage.setItem('app_settings', JSON.stringify(settings));
     const root = document.documentElement;
@@ -174,79 +229,76 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [settings]);
 
+  // Sync settings useCase with profile
+  useEffect(() => {
+    if (profile?.use_case && profile.use_case !== settings.useCase) {
+      setSettings(prev => ({ ...prev, useCase: profile.use_case || prev.useCase, onboardingDone: !!profile.use_case }));
+    }
+  }, [profile?.use_case]);
+
+  // Wrapper for addTask that returns sync Task
   const addTask = useCallback((task: Omit<Task, 'id'>) => {
-    const newTask = { ...task, id: crypto.randomUUID() };
-    setTasks(prev => [...prev, newTask]);
-    return newTask;
-  }, []);
-
-  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-  }, []);
-
-  const deleteTask = useCallback((id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-  }, []);
-
-  const getTasksForDate = useCallback((date: string) => {
-    return tasks.filter(t => t.dates.includes(date));
-  }, [tasks]);
-
-  const addTaskToDate = useCallback((taskId: string, date: string) => {
-    setTasks(prev => prev.map(t =>
-      t.id === taskId && !t.dates.includes(date)
-        ? { ...t, dates: [...t.dates, date] }
-        : t
-    ));
-  }, []);
-
-  const addSession = useCallback((session: Omit<Session, 'id'>) => {
-    setSessions(prev => [...prev, { ...session, id: crypto.randomUUID() }]);
-  }, []);
-
-  const getSessionsForDate = useCallback((date: string) => {
-    return sessions.filter(s => s.date === date);
-  }, [sessions]);
-
-  const toggleTaskCompletion = useCallback((taskId: string, date: string) => {
-    const key = `${taskId}_${date}`;
-    setCompletions(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-
-  const isTaskCompleted = useCallback((taskId: string, date: string) => {
-    return !!completions[`${taskId}_${date}`];
-  }, [completions]);
-
-  const setTaskCompleted = useCallback((taskId: string, date: string, completed: boolean) => {
-    const key = `${taskId}_${date}`;
-    setCompletions(prev => ({ ...prev, [key]: completed }));
-  }, []);
+    const tempTask: Task = { ...task, id: crypto.randomUUID() };
+    sbAddTask(task); // fire and forget async
+    return tempTask;
+  }, [sbAddTask]);
 
   const updateSettings = useCallback((updates: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
   }, []);
 
   const clearAllData = useCallback(() => {
-    setTasks([]);
-    setSessions([]);
-    setCompletions({});
+    // Only clears local settings
+    setSettings(defaultSettings);
   }, []);
 
   const exportData = useCallback(() => {
-    return JSON.stringify({ tasks, sessions, completions, settings }, null, 2);
-  }, [tasks, sessions, completions, settings]);
+    return JSON.stringify({ tasks: sbTasks, sessions: sbSessions, completions, settings }, null, 2);
+  }, [sbTasks, sbSessions, completions, settings]);
 
   const taskExists = useCallback((name: string) => {
-    return tasks.some(t => t.name.toLowerCase() === name.toLowerCase());
-  }, [tasks]);
+    return sbTasks.some(t => t.name.toLowerCase() === name.toLowerCase());
+  }, [sbTasks]);
 
   return (
     <AppContext.Provider value={{
-      tasks, sessions, completions, settings, timer,
-      addTask, updateTask, deleteTask, getTasksForDate, addTaskToDate,
-      addSession, getSessionsForDate,
-      toggleTaskCompletion, isTaskCompleted, setTaskCompleted,
-      updateSettings, clearAllData, exportData, taskExists,
+      tasks: sbTasks,
+      sessions: sbSessions,
+      completions,
+      settings,
+      timer,
+      addTask,
+      updateTask: sbUpdateTask as any,
+      deleteTask: sbDeleteTask as any,
+      getTasksForDate: sbGetTasksForDate,
+      addTaskToDate: sbAddTaskToDate as any,
+      addSession: sbAddSession as any,
+      getSessionsForDate: sbGetSessionsForDate,
+      toggleTaskCompletion: toggleTaskCompletion as any,
+      isTaskCompleted,
+      setTaskCompleted: setTaskCompleted as any,
+      updateSettings,
+      clearAllData,
+      exportData,
+      taskExists,
+      user,
+      authLoading,
+      profile,
+      updateProfile,
+      roles,
+      hasRole,
+      activeRole,
+      setActiveRole,
+      referralCode,
+      coachRelationships,
+      pendingRequests,
+      acceptedStudents,
+      acceptedTeachers,
+      sendCoachRequest,
+      respondToCoachRequest: respondToCoachRequest,
+      lookupReferralCode,
+      refetchCoach,
+      fetchSessionsForUser,
     }}>
       {children}
     </AppContext.Provider>

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { format, getDaysInMonth, addMonths, subMonths } from 'date-fns';
 import { Plus, Trash2, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { useSupabaseTasks } from '@/hooks/useSupabaseTasks';
+// useSupabaseTasks is now consumed via AppContext
 import { useTemplates, TaskTemplate } from '@/hooks/useTemplates';
 import { Task, YKS_TYT_SUBJECTS, YKS_AYT_SUBJECTS } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -25,10 +25,10 @@ const dayNames = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 export default function PlanningPage() {
   const {
     isTaskCompleted, settings, toggleTaskCompletion,
+    tasks, addTask: addTaskContext, updateTask, deleteTask, getTasksForDate,
   } = useApp();
-  const { tasks, addTask: addTaskAsync, updateTask, deleteTask, getTasksForDate } = useSupabaseTasks();
 
-  const addTask = (task: Omit<Task, 'id'>) => { addTaskAsync(task); };
+  const addTask = (task: Omit<Task, 'id'>) => { addTaskContext(task); };
   const { templates, addTemplate, deleteTemplate } = useTemplates();
 
   const now = new Date();
