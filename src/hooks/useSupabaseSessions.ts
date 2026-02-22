@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { addPendingChange, getCachedSessions } from '@/hooks/useOfflineSync';
 import type { Session } from '@/types';
 
 export function useSupabaseSessions() {
@@ -10,6 +11,13 @@ export function useSupabaseSessions() {
 
   const fetchSessions = useCallback(async () => {
     if (!user) { setSessions([]); setLoading(false); return; }
+    
+    if (!navigator.onLine) {
+      setSessions(getCachedSessions());
+      setLoading(false);
+      return;
+    }
+    
     const { data, error } = await supabase
       .from('sessions')
       .select('*')
@@ -25,6 +33,8 @@ export function useSupabaseSessions() {
         type: row.type as 'work' | 'break',
         timestamp: row.timestamp,
       })));
+    } else if (error) {
+      setSessions(getCachedSessions());
     }
     setLoading(false);
   }, [user]);
@@ -33,30 +43,34 @@ export function useSupabaseSessions() {
 
   const addSession = useCallback(async (session: Omit<Session, 'id'>) => {
     if (!user) return;
-    const { data, error } = await supabase
+    const tempId = crypto.randomUUID();
+    const dbRow = {
+      id: tempId,
+      user_id: user.id,
+      task_id: session.taskId || null,
+      task_name: session.taskName,
+      date: session.date,
+      duration: session.duration,
+      type: session.type,
+      timestamp: session.timestamp,
+    };
+
+    // Optimistic update
+    const newSession: Session = { ...session, id: tempId };
+    setSessions(prev => [newSession, ...prev]);
+
+    if (!navigator.onLine) {
+      addPendingChange({ table: 'sessions', type: 'insert', data: dbRow });
+      return;
+    }
+
+    const { error } = await supabase
       .from('sessions')
-      .insert({
-        user_id: user.id,
-        task_id: session.taskId || null,
-        task_name: session.taskName,
-        date: session.date,
-        duration: session.duration,
-        type: session.type,
-        timestamp: session.timestamp,
-      })
+      .insert(dbRow)
       .select()
       .single();
-    if (!error && data) {
-      const newSession: Session = {
-        id: data.id,
-        taskId: data.task_id || '',
-        taskName: data.task_name,
-        date: data.date,
-        duration: data.duration,
-        type: data.type as 'work' | 'break',
-        timestamp: data.timestamp,
-      };
-      setSessions(prev => [newSession, ...prev]);
+    if (error) {
+      addPendingChange({ table: 'sessions', type: 'insert', data: dbRow });
     }
   }, [user]);
 

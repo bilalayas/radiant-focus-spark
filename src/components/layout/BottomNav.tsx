@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Timer, Calendar, BarChart3, Settings, Users } from 'lucide-react';
+import { Timer, Calendar, BarChart3, Settings, Users, Shield } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export const BottomNav = () => {
@@ -8,8 +8,9 @@ export const BottomNav = () => {
   const { activeRole, hasRole } = useApp();
 
   const isTeacherMode = activeRole === 'teacher' && hasRole('teacher');
+  const isAdmin = hasRole('admin');
 
-  const tabs = isTeacherMode
+  const baseTabs = isTeacherMode
     ? [
         { path: '/', icon: Users, label: 'Öğrenciler' },
         { path: '/settings', icon: Settings, label: 'Ayarlar' },
@@ -20,6 +21,10 @@ export const BottomNav = () => {
         { path: '/analytics', icon: BarChart3, label: 'Analiz' },
         { path: '/settings', icon: Settings, label: 'Ayarlar' },
       ];
+
+  const tabs = isAdmin
+    ? [...baseTabs, { path: '/admin', icon: Shield, label: 'Admin' }]
+    : baseTabs;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50">

@@ -189,8 +189,8 @@ export default function SettingsPage() {
           </Button>
         </div>
 
-        {/* Coach Section - only for exam/university users in student mode */}
-        {isExamOrUni && !isTeacherMode && (
+        {/* Coach Section - show for exam/uni students AND for teachers */}
+        {(isExamOrUni || isTeacherMode) && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
               <GraduationCap size={14} /> Koçla Çalış
