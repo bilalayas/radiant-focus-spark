@@ -15,6 +15,7 @@ import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDetailPage from "./pages/StudentDetailPage";
+import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="/" element={<AppLayout><TeacherDashboard /></AppLayout>} />
         <Route path="/student/:studentId" element={<AppLayout><StudentDetailPage /></AppLayout>} />
         <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
+        <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
         <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -71,6 +73,7 @@ function AppRoutes() {
       <Route path="/planning" element={<AppLayout><PlanningPage /></AppLayout>} />
       <Route path="/analytics" element={<AppLayout><AnalyticsPage /></AppLayout>} />
       <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
+      <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
       <Route path="/onboarding" element={<Navigate to="/" replace />} />
       <Route path="/auth" element={<Navigate to="/" replace />} />
       <Route path="*" element={<NotFound />} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { addPendingChange, getCachedTasks } from '@/hooks/useOfflineSync';
 import type { Task } from '@/types';
 
 export function useSupabaseTasks() {
@@ -10,6 +11,14 @@ export function useSupabaseTasks() {
 
   const fetchTasks = useCallback(async () => {
     if (!user) { setTasks([]); setLoading(false); return; }
+    
+    if (!navigator.onLine) {
+      // Load from cache when offline
+      setTasks(getCachedTasks());
+      setLoading(false);
+      return;
+    }
+    
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
@@ -24,6 +33,9 @@ export function useSupabaseTasks() {
         startHour: row.start_hour ?? undefined,
         dates: row.dates ?? [],
       })));
+    } else if (error) {
+      // Fallback to cache on error
+      setTasks(getCachedTasks());
     }
     setLoading(false);
   }, [user]);
@@ -32,31 +44,41 @@ export function useSupabaseTasks() {
 
   const addTask = useCallback(async (task: Omit<Task, 'id'>) => {
     if (!user) return null;
+    const tempId = crypto.randomUUID();
+    const dbRow = {
+      id: tempId,
+      user_id: user.id,
+      name: task.name,
+      category: task.category ?? null,
+      planned_duration: task.plannedDuration ?? null,
+      start_hour: task.startHour ?? null,
+      dates: task.dates,
+    };
+
+    // Optimistic update
+    const newTask: Task = { ...task, id: tempId };
+    setTasks(prev => [newTask, ...prev]);
+
+    if (!navigator.onLine) {
+      addPendingChange({ table: 'tasks', type: 'insert', data: dbRow });
+      return newTask;
+    }
+
     const { data, error } = await supabase
       .from('tasks')
-      .insert({
-        user_id: user.id,
-        name: task.name,
-        category: task.category ?? null,
-        planned_duration: task.plannedDuration ?? null,
-        start_hour: task.startHour ?? null,
-        dates: task.dates,
-      })
+      .insert(dbRow)
       .select()
       .single();
     if (!error && data) {
-      const newTask: Task = {
-        id: data.id,
-        name: data.name,
-        category: data.category ?? undefined,
-        plannedDuration: data.planned_duration ?? undefined,
-        startHour: data.start_hour ?? undefined,
-        dates: data.dates ?? [],
-      };
-      setTasks(prev => [newTask, ...prev]);
-      return newTask;
+      // Update with real ID if different
+      if (data.id !== tempId) {
+        setTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: data.id } : t));
+        return { ...newTask, id: data.id };
+      }
+    } else if (error) {
+      addPendingChange({ table: 'tasks', type: 'insert', data: dbRow });
     }
-    return null;
+    return newTask;
   }, [user]);
 
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {

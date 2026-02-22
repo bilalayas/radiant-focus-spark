@@ -7,6 +7,7 @@ import { useSupabaseSessions } from '@/hooks/useSupabaseSessions';
 import { useSupabaseCompletions } from '@/hooks/useSupabaseCompletions';
 import { useRoles } from '@/hooks/useRoles';
 import { useCoach } from '@/hooks/useCoach';
+import { useOfflineSync, cacheTasks, cacheSessions } from '@/hooks/useOfflineSync';
 import type { Task, Session } from '@/types';
 import type { AppRole } from '@/hooks/useRoles';
 import type { CoachRelationship } from '@/hooks/useCoach';
@@ -92,9 +93,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   } = useCoach(user);
 
   // Supabase-backed data
-  const { tasks: sbTasks, addTask: sbAddTask, updateTask: sbUpdateTask, deleteTask: sbDeleteTask, getTasksForDate: sbGetTasksForDate, addTaskToDate: sbAddTaskToDate } = useSupabaseTasks();
-  const { sessions: sbSessions, addSession: sbAddSession, getSessionsForDate: sbGetSessionsForDate, fetchSessionsForUser } = useSupabaseSessions();
+  const { tasks: sbTasks, addTask: sbAddTask, updateTask: sbUpdateTask, deleteTask: sbDeleteTask, getTasksForDate: sbGetTasksForDate, addTaskToDate: sbAddTaskToDate, refetch: refetchTasks } = useSupabaseTasks();
+  const { sessions: sbSessions, addSession: sbAddSession, getSessionsForDate: sbGetSessionsForDate, fetchSessionsForUser, refetch: refetchSessions } = useSupabaseSessions();
   const { completions, isTaskCompleted, setTaskCompleted, toggleTaskCompletion } = useSupabaseCompletions();
+
+  // Offline sync
+  const handleSynced = useCallback(() => {
+    refetchTasks();
+    refetchSessions();
+  }, [refetchTasks, refetchSessions]);
+  useOfflineSync(user?.id, handleSynced);
+
+  // Cache data locally for offline access
+  useEffect(() => { if (sbTasks.length > 0) cacheTasks(sbTasks); }, [sbTasks]);
+  useEffect(() => { if (sbSessions.length > 0) cacheSessions(sbSessions); }, [sbSessions]);
 
   const [settings, setSettings] = useState<AppSettings>(() => ({ ...defaultSettings, ...load('app_settings', defaultSettings) }));
 
