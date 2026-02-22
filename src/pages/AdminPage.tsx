@@ -10,11 +10,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 interface UserWithRoles {
   user_id: string;
   display_name: string | null;
-  email?: string;
   roles: string[];
 }
 
@@ -24,17 +26,16 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [emailInput, setEmailInput] = useState('');
-  const [addingTeacher, setAddingTeacher] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>('teacher');
+  const [addingRole, setAddingRole] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    // Fetch all profiles
     const { data: profiles } = await supabase
       .from('profiles')
       .select('user_id, display_name')
       .order('created_at', { ascending: false });
 
-    // Fetch all roles
     const { data: roles } = await supabase
       .from('user_roles')
       .select('user_id, role');
@@ -57,11 +58,10 @@ export default function AdminPage() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  const handleAddTeacherByCode = async () => {
+  const handleAddRoleByName = async () => {
     if (!emailInput.trim()) return;
-    setAddingTeacher(true);
+    setAddingRole(true);
 
-    // Look up profile by display_name (since we can't query auth.users)
     const { data: profiles } = await supabase
       .from('profiles')
       .select('user_id, display_name')
@@ -69,32 +69,39 @@ export default function AdminPage() {
 
     if (!profiles || profiles.length === 0) {
       toast.error('Kullanıcı bulunamadı');
-      setAddingTeacher(false);
+      setAddingRole(false);
       return;
     }
 
     const targetUser = profiles[0];
-
-    // Check if already has teacher role
     const existing = users.find(u => u.user_id === targetUser.user_id);
-    if (existing?.roles.includes('teacher')) {
-      toast.error('Bu kullanıcı zaten öğretmen');
-      setAddingTeacher(false);
+    if (existing?.roles.includes(selectedRole)) {
+      toast.error(`Bu kullanıcı zaten ${selectedRole === 'teacher' ? 'öğretmen' : selectedRole === 'admin' ? 'admin' : selectedRole}`);
+      setAddingRole(false);
       return;
     }
 
     const { error } = await supabase
       .from('user_roles')
-      .insert({ user_id: targetUser.user_id, role: 'teacher' as any });
+      .insert({ user_id: targetUser.user_id, role: selectedRole as any });
 
     if (error) {
       toast.error('Rol eklenemedi: ' + error.message);
     } else {
-      toast.success(`${targetUser.display_name} öğretmen olarak atandı`);
+      const roleLabel = selectedRole === 'teacher' ? 'Öğretmen' : selectedRole === 'admin' ? 'Admin' : selectedRole;
+      toast.success(`${targetUser.display_name} → ${roleLabel} olarak atandı`);
       setEmailInput('');
       await fetchUsers();
     }
-    setAddingTeacher(false);
+    setAddingRole(false);
+  };
+
+  const handleAddRole = async (userId: string, role: string) => {
+    const { error } = await supabase
+      .from('user_roles')
+      .insert({ user_id: userId, role: role as any });
+    if (error) toast.error(error.message);
+    else { toast.success('Rol eklendi'); fetchUsers(); }
   };
 
   const handleRemoveRole = async (userId: string, role: string) => {
@@ -135,27 +142,37 @@ export default function AdminPage() {
       </h1>
 
       <div className="space-y-6">
-        {/* Add Teacher */}
+        {/* Add Role */}
         <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
           <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
-            <UserPlus size={14} /> Öğretmen Ata
+            <UserPlus size={14} /> Rol Ata
           </h3>
           <div className="flex gap-2">
             <Input
               value={emailInput}
               onChange={e => setEmailInput(e.target.value)}
               placeholder="Kullanıcı adı ara..."
-              className="rounded-xl text-sm"
+              className="rounded-xl text-sm flex-1"
             />
-            <Button
-              onClick={handleAddTeacherByCode}
-              disabled={addingTeacher || !emailInput.trim()}
-              className="rounded-xl"
-              size="sm"
-            >
-              {addingTeacher ? '...' : 'Ata'}
-            </Button>
+            <Select value={selectedRole} onValueChange={setSelectedRole}>
+              <SelectTrigger className="w-[110px] rounded-xl text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="teacher">Öğretmen</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="student">Öğrenci</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+          <Button
+            onClick={handleAddRoleByName}
+            disabled={addingRole || !emailInput.trim()}
+            className="w-full rounded-xl"
+            size="sm"
+          >
+            {addingRole ? '...' : 'Rolü Ata'}
+          </Button>
         </div>
 
         {/* User List */}
@@ -181,69 +198,62 @@ export default function AdminPage() {
           ) : (
             <div className="space-y-2 max-h-[60vh] overflow-y-auto">
               {filteredUsers.map(u => (
-                <div key={u.user_id} className="flex items-center justify-between bg-muted/50 rounded-xl px-3 py-2.5">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {u.display_name || 'İsimsiz'}
-                    </p>
-                    <div className="flex gap-1 mt-0.5 flex-wrap">
-                      {u.roles.length === 0 && (
-                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Kullanıcı</Badge>
-                      )}
-                      {u.roles.map(role => (
-                        <Badge
-                          key={role}
-                          variant={role === 'admin' ? 'default' : role === 'teacher' ? 'outline' : 'secondary'}
-                          className="text-[9px] px-1.5 py-0"
-                        >
-                          {role === 'admin' ? 'Admin' : role === 'teacher' ? 'Öğretmen' : role === 'student' ? 'Öğrenci' : role}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-1">
-                    {!u.roles.includes('teacher') && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[10px] px-2"
-                        onClick={async () => {
-                          const { error } = await supabase
-                            .from('user_roles')
-                            .insert({ user_id: u.user_id, role: 'teacher' as any });
-                          if (error) toast.error(error.message);
-                          else { toast.success('Öğretmen rolü eklendi'); fetchUsers(); }
-                        }}
-                      >
-                        +Öğretmen
-                      </Button>
-                    )}
-                    {u.roles.includes('teacher') && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] px-2 text-destructive">
-                            <Trash2 size={10} />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="rounded-2xl max-w-sm">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Öğretmen rolü kaldırılsın mı?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {u.display_name} kullanıcısından öğretmen rolü kaldırılacak.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="rounded-xl">İptal</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleRemoveRole(u.user_id, 'teacher')}
-                              className="rounded-xl bg-destructive text-destructive-foreground"
+                <div key={u.user_id} className="bg-muted/50 rounded-xl px-3 py-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {u.display_name || 'İsimsiz'}
+                      </p>
+                      <div className="flex gap-1 mt-0.5 flex-wrap">
+                        {u.roles.length === 0 && (
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Kullanıcı</Badge>
+                        )}
+                        {u.roles.map(role => (
+                          <div key={role} className="flex items-center gap-0.5">
+                            <Badge
+                              variant={role === 'admin' ? 'default' : role === 'teacher' ? 'outline' : 'secondary'}
+                              className="text-[9px] px-1.5 py-0"
                             >
-                              Kaldır
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
+                              {role === 'admin' ? 'Admin' : role === 'teacher' ? 'Öğretmen' : role === 'student' ? 'Öğrenci' : role}
+                            </Badge>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <button className="text-destructive/60 hover:text-destructive transition-colors">
+                                  <Trash2 size={10} />
+                                </button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent className="rounded-2xl max-w-sm">
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>{role} rolü kaldırılsın mı?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {u.display_name} kullanıcısından {role} rolü kaldırılacak.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel className="rounded-xl">İptal</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleRemoveRole(u.user_id, role)}
+                                    className="rounded-xl bg-destructive text-destructive-foreground"
+                                  >
+                                    Kaldır
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      {!u.roles.includes('teacher') && (
+                        <Button size="sm" variant="ghost" className="h-7 text-[10px] px-2"
+                          onClick={() => handleAddRole(u.user_id, 'teacher')}>+Öğrt</Button>
+                      )}
+                      {!u.roles.includes('admin') && (
+                        <Button size="sm" variant="ghost" className="h-7 text-[10px] px-2"
+                          onClick={() => handleAddRole(u.user_id, 'admin')}>+Admin</Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

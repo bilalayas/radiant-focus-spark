@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { Sparkles, Mail, Lock, User } from 'lucide-react';
+import { Sparkles, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AuthPage() {
@@ -11,8 +11,11 @@ export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +34,16 @@ export default function AuthPage() {
     }
 
     if (mode === 'register') {
+      if (password !== confirmPassword) {
+        toast.error('Şifreler eşleşmiyor');
+        setLoading(false);
+        return;
+      }
+      if (password.length < 6) {
+        toast.error('Şifre en az 6 karakter olmalı');
+        setLoading(false);
+        return;
+      }
       const { error } = await signUp(email, password, displayName || undefined);
       setLoading(false);
       if (error) {
@@ -90,18 +103,48 @@ export default function AuthPage() {
             />
           </div>
           {mode !== 'forgot' && (
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-              <Input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Şifre"
-                required
-                minLength={6}
-                className="pl-9 rounded-xl"
-              />
-            </div>
+            <>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Şifre"
+                  required
+                  minLength={6}
+                  className="pl-9 pr-10 rounded-xl"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {mode === 'register' && (
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                  <Input
+                    type={showConfirm ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Şifre Tekrar"
+                    required
+                    minLength={6}
+                    className="pl-9 pr-10 rounded-xl"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              )}
+            </>
           )}
           <Button type="submit" className="w-full h-11 rounded-2xl font-semibold" disabled={loading}>
             {loading ? '...' : mode === 'login' ? 'Giriş Yap' : mode === 'register' ? 'Kayıt Ol' : 'Bağlantı Gönder'}

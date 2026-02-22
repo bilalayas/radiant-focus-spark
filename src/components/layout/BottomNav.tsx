@@ -8,23 +8,30 @@ export const BottomNav = () => {
   const { activeRole, hasRole } = useApp();
 
   const isTeacherMode = activeRole === 'teacher' && hasRole('teacher');
+  const isAdminMode = activeRole === 'admin' && hasRole('admin');
   const isAdmin = hasRole('admin');
 
-  const baseTabs = isTeacherMode
-    ? [
-        { path: '/', icon: Users, label: 'Öğrenciler' },
-        { path: '/settings', icon: Settings, label: 'Ayarlar' },
-      ]
-    : [
-        { path: '/', icon: Timer, label: 'Timer' },
-        { path: '/planning', icon: Calendar, label: 'Planlama' },
-        { path: '/analytics', icon: BarChart3, label: 'Analiz' },
-        { path: '/settings', icon: Settings, label: 'Ayarlar' },
-      ];
-
-  const tabs = isAdmin
-    ? [...baseTabs, { path: '/admin', icon: Shield, label: 'Admin' }]
-    : baseTabs;
+  let tabs;
+  if (isAdminMode) {
+    tabs = [
+      { path: '/admin', icon: Shield, label: 'Admin' },
+      { path: '/settings', icon: Settings, label: 'Ayarlar' },
+    ];
+  } else if (isTeacherMode) {
+    tabs = [
+      { path: '/', icon: Users, label: 'Öğrenciler' },
+      { path: '/settings', icon: Settings, label: 'Ayarlar' },
+      ...(isAdmin ? [{ path: '/admin', icon: Shield, label: 'Admin' }] : []),
+    ];
+  } else {
+    tabs = [
+      { path: '/', icon: Timer, label: 'Timer' },
+      { path: '/planning', icon: Calendar, label: 'Planlama' },
+      { path: '/analytics', icon: BarChart3, label: 'Analiz' },
+      { path: '/settings', icon: Settings, label: 'Ayarlar' },
+      ...(isAdmin ? [{ path: '/admin', icon: Shield, label: 'Admin' }] : []),
+    ];
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50">
