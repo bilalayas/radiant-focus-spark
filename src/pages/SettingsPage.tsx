@@ -5,13 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ColorPalette, paletteNames, PlanningMode } from '@/types';
-import { Download, Trash2, Sun, Moon, LogOut, Save, User, Copy, Check, UserPlus, GraduationCap, ArrowLeftRight } from 'lucide-react';
+import { Download, Trash2, Sun, Moon, LogOut, Save, User, Copy, Check, UserPlus, GraduationCap, ArrowLeftRight, Lock, Eye, EyeOff } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,7 +24,7 @@ export default function SettingsPage() {
     referralCode, pendingRequests, acceptedTeachers, acceptedStudents,
     sendCoachRequest, respondToCoachRequest, lookupReferralCode, refetchCoach,
   } = useApp();
-  const { signOut } = useAuth();
+  const { signOut, updatePassword } = useAuth();
 
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [nameEditing, setNameEditing] = useState(false);
@@ -35,9 +35,20 @@ export default function SettingsPage() {
   const [lookupError, setLookupError] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Password change
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+
   const isTeacher = hasRole('teacher');
+  const isAdmin = hasRole('admin');
+  const hasMultipleRoles = roles.length > 1 || isTeacher || isAdmin;
   const isExamOrUni = settings.useCase === 'exam' || settings.useCase === 'university';
   const isTeacherMode = activeRole === 'teacher' && isTeacher;
+  const isAdminMode = activeRole === 'admin' && isAdmin;
 
   const handleExport = () => {
     const data = exportData();
@@ -107,9 +118,40 @@ export default function SettingsPage() {
     refetchCoach();
   };
 
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('Şifre en az 6 karakter olmalı');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Şifreler eşleşmiyor');
+      return;
+    }
+    setChangingPassword(true);
+    const { error } = await updatePassword(newPassword);
+    setChangingPassword(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Şifre güncellendi!');
+      setPasswordDialogOpen(false);
+      setNewPassword('');
+      setConfirmPassword('');
+    }
+  };
+
   const useCaseLabel = (uc: string) => {
     const map: Record<string, string> = { exam: 'Sınav Hazırlığı', university: 'Üniversite (YKS)', productivity: 'Genel Üretkenlik', free: 'Serbest Kullanım' };
     return map[uc] || uc;
+  };
+
+  const getRoleOptions = () => {
+    const options: { value: string; label: string }[] = [
+      { value: 'student', label: isExamOrUni ? 'Öğrenci' : useCaseLabel(settings.useCase || 'free') },
+    ];
+    if (isTeacher) options.push({ value: 'teacher', label: 'Öğretmen' });
+    if (isAdmin) options.push({ value: 'admin', label: 'Admin' });
+    return options;
   };
 
   return (
@@ -159,12 +201,17 @@ export default function SettingsPage() {
                     Öğretmen
                   </span>
                 )}
+                {isAdmin && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">
+                    Admin
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Role switching for teachers */}
-          {isTeacher && (
+          {/* Role switching for users with multiple roles */}
+          {hasMultipleRoles && (
             <div className="flex items-center justify-between pt-2 border-t border-border">
               <span className="text-sm text-muted-foreground flex items-center gap-2">
                 <ArrowLeftRight size={14} /> Aktif Rol
@@ -172,28 +219,40 @@ export default function SettingsPage() {
               <Select value={activeRole} onValueChange={setActiveRole}>
                 <SelectTrigger className="w-[140px] h-8 rounded-lg text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="student">{isExamOrUni ? 'Öğrenci' : useCaseLabel(settings.useCase || 'free')}</SelectItem>
-                  <SelectItem value="teacher">Öğretmen</SelectItem>
+                  {getRoleOptions().map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSignOut}
-            className="w-full rounded-xl text-destructive border-destructive/30 hover:bg-destructive/5"
-          >
-            <LogOut size={14} className="mr-2" /> Çıkış Yap
-          </Button>
+          {/* Password change + Sign out */}
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPasswordDialogOpen(true)}
+              className="flex-1 rounded-xl"
+            >
+              <Lock size={14} className="mr-2" /> Şifre Değiştir
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSignOut}
+              className="flex-1 rounded-xl text-destructive border-destructive/30 hover:bg-destructive/5"
+            >
+              <LogOut size={14} className="mr-2" /> Çıkış
+            </Button>
+          </div>
         </div>
 
-        {/* Coach Section - show for exam/uni students AND for teachers */}
+        {/* Coach Section */}
         {(isExamOrUni || isTeacherMode) && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
-              <GraduationCap size={14} /> Koçla Çalış
+              <GraduationCap size={14} /> {isTeacherMode ? 'Öğrencilerim & Koçluk' : 'Koçla Çalış'}
             </h3>
 
             {/* Referral code display + input */}
@@ -218,16 +277,31 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            {/* Connected teachers */}
-            {acceptedTeachers.length > 0 && (
+            {/* Connected teachers (student view) */}
+            {acceptedTeachers.length > 0 && !isTeacherMode && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1.5">Koçlarım</p>
                 {acceptedTeachers.map(rel => (
-                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl">
+                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl mb-1">
                     <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
                       {(rel.teacher_name || '?')[0].toUpperCase()}
                     </div>
-                    <span className="text-sm text-foreground">{rel.teacher_name}</span>
+                    <span className="text-sm text-foreground">{rel.teacher_name || 'İsimsiz'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Connected students (teacher view) */}
+            {acceptedStudents.length > 0 && isTeacherMode && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">Öğrencilerim</p>
+                {acceptedStudents.map(rel => (
+                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl mb-1">
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                      {(rel.student_name || '?')[0].toUpperCase()}
+                    </div>
+                    <span className="text-sm text-foreground">{rel.student_name || 'İsimsiz'}</span>
                   </div>
                 ))}
               </div>
@@ -239,7 +313,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Bekleyen İstekler</p>
                 {pendingRequests.map(req => {
                   const isFromTeacher = req.teacher_id !== user?.id;
-                  const name = isFromTeacher ? req.teacher_name : req.student_name;
+                  const name = isFromTeacher ? (req.teacher_name || 'İsimsiz') : (req.student_name || 'İsimsiz');
                   const roleLabel = isFromTeacher ? 'öğretmen' : 'öğrenci';
                   return (
                     <div key={req.id} className="bg-accent/30 rounded-xl p-3 space-y-2">
@@ -262,8 +336,8 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Notifications - hide in teacher mode */}
-        {!isTeacherMode && (
+        {/* Notifications - hide in teacher/admin mode */}
+        {!isTeacherMode && !isAdminMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
             <h3 className="text-sm font-semibold mb-3 text-card-foreground">Bildirim Ayarları</h3>
             <div className="flex items-center justify-between">
@@ -273,8 +347,8 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Planning Hours - hide in teacher mode */}
-        {!isTeacherMode && (
+        {/* Planning Hours - hide in teacher/admin mode */}
+        {!isTeacherMode && !isAdminMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground">Planlama</h3>
             <div className="flex items-center justify-between">
@@ -315,8 +389,8 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Use Case - hide in teacher mode */}
-        {!isTeacherMode && (
+        {/* Use Case - hide in teacher/admin mode */}
+        {!isTeacherMode && !isAdminMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground">Kullanım Amacı</h3>
             <Select value={settings.useCase || 'free'} onValueChange={v => updateSettings({ useCase: v })}>
@@ -445,6 +519,56 @@ export default function SettingsPage() {
                 </Button>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Change Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Şifre Değiştir</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Input
+                type={showNewPw ? 'text' : 'password'}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Yeni şifre (min 6 karakter)"
+                className="rounded-xl pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw(!showNewPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <div className="relative">
+              <Input
+                type={showConfirmPw ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Şifre tekrar"
+                className="rounded-xl pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPw(!showConfirmPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <Button
+              onClick={handleChangePassword}
+              disabled={changingPassword || newPassword.length < 6}
+              className="w-full rounded-xl"
+            >
+              {changingPassword ? '...' : 'Şifreyi Güncelle'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

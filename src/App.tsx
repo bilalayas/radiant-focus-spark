@@ -53,6 +53,19 @@ function AppRoutes() {
     );
   }
 
+  // Admin mode
+  if (activeRole === 'admin' && hasRole('admin')) {
+    return (
+      <Routes>
+        <Route path="/" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
+        <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
+        <Route path="/auth" element={<Navigate to="/admin" replace />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    );
+  }
+
   // Teacher mode
   if (activeRole === 'teacher' && hasRole('teacher')) {
     return (
