@@ -248,11 +248,11 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Coach Section */}
-        {(isExamOrUni || isTeacherMode) && (
+        {/* Coach Section - Student Mode: Koçlarım */}
+        {!isTeacherMode && !isAdminMode && isExamOrUni && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
-              <GraduationCap size={14} /> {isTeacherMode ? 'Öğrencilerim & Koçluk' : 'Koçla Çalış'}
+              <GraduationCap size={14} /> Koçla Çalış
             </h3>
 
             {/* Referral code display + input */}
@@ -266,7 +266,6 @@ export default function SettingsPage() {
                   {copied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
                 </Button>
               </div>
-
               <Button
                 variant="outline"
                 size="sm"
@@ -277,8 +276,8 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            {/* Connected teachers (student view) */}
-            {acceptedTeachers.length > 0 && !isTeacherMode && (
+            {/* Connected teachers */}
+            {acceptedTeachers.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1.5">Koçlarım</p>
                 {acceptedTeachers.map(rel => (
@@ -292,10 +291,47 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Connected students (teacher view) */}
-            {acceptedStudents.length > 0 && isTeacherMode && (
+            {/* Pending requests for student */}
+            {pendingRequests.filter(r => r.teacher_id !== user?.id).length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Bekleyen İstekler</p>
+                {pendingRequests.filter(r => r.teacher_id !== user?.id).map(req => (
+                  <div key={req.id} className="bg-accent/30 rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-foreground">
+                      <strong>{req.teacher_name || 'İsimsiz'}</strong> adlı öğretmen sizinle çalışmak istiyor.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 rounded-lg h-8 text-xs" onClick={() => handleRespondRequest(req.id, true)}>Kabul Et</Button>
+                      <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 text-xs" onClick={() => handleRespondRequest(req.id, false)}>Reddet</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Coach Section - Teacher Mode: Öğrencilerim */}
+        {isTeacherMode && (
+          <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
+            <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
+              <GraduationCap size={14} /> Öğrencilerim
+            </h3>
+
+            {/* Referral code display */}
+            <div className="flex items-center justify-between bg-muted rounded-xl px-3 py-2.5">
               <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Öğrencilerim</p>
+                <p className="text-[10px] text-muted-foreground">Referans Kodun</p>
+                <p className="text-sm font-mono font-bold text-foreground">{referralCode || '...'}</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-8 w-8 p-0">
+                {copied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
+              </Button>
+            </div>
+
+            {/* Connected students */}
+            {acceptedStudents.length > 0 && (
+              <div>
                 {acceptedStudents.map(rel => (
                   <div key={rel.id} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl mb-1">
                     <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
@@ -307,30 +343,21 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Pending requests */}
-            {pendingRequests.length > 0 && (
+            {/* Pending requests for teacher */}
+            {pendingRequests.filter(r => r.student_id !== user?.id).length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Bekleyen İstekler</p>
-                {pendingRequests.map(req => {
-                  const isFromTeacher = req.teacher_id !== user?.id;
-                  const name = isFromTeacher ? (req.teacher_name || 'İsimsiz') : (req.student_name || 'İsimsiz');
-                  const roleLabel = isFromTeacher ? 'öğretmen' : 'öğrenci';
-                  return (
-                    <div key={req.id} className="bg-accent/30 rounded-xl p-3 space-y-2">
-                      <p className="text-xs text-foreground">
-                        <strong>{name}</strong> adlı {roleLabel} sizinle çalışmak istiyor.
-                      </p>
-                      <div className="flex gap-2">
-                        <Button size="sm" className="flex-1 rounded-lg h-8 text-xs" onClick={() => handleRespondRequest(req.id, true)}>
-                          Kabul Et
-                        </Button>
-                        <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 text-xs" onClick={() => handleRespondRequest(req.id, false)}>
-                          Reddet
-                        </Button>
-                      </div>
+                {pendingRequests.filter(r => r.student_id !== user?.id).map(req => (
+                  <div key={req.id} className="bg-accent/30 rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-foreground">
+                      <strong>{req.student_name || 'İsimsiz'}</strong> adlı öğrenci sizinle çalışmak istiyor.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 rounded-lg h-8 text-xs" onClick={() => handleRespondRequest(req.id, true)}>Kabul Et</Button>
+                      <Button size="sm" variant="outline" className="flex-1 rounded-lg h-8 text-xs" onClick={() => handleRespondRequest(req.id, false)}>Reddet</Button>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
           </div>

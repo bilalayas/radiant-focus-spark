@@ -5,6 +5,7 @@ export interface Task {
   plannedDuration?: number; // minutes
   dates: string[]; // YYYY-MM-DD
   startHour?: number; // 0-24
+  source?: 'self' | 'teacher'; // who created this task
 }
 
 export interface Session {

@@ -9,19 +9,17 @@ export const BottomNav = () => {
 
   const isTeacherMode = activeRole === 'teacher' && hasRole('teacher');
   const isAdminMode = activeRole === 'admin' && hasRole('admin');
-  const isAdmin = hasRole('admin');
 
   let tabs;
   if (isAdminMode) {
     tabs = [
-      { path: '/admin', icon: Shield, label: 'Admin' },
+      { path: '/', icon: Shield, label: 'Admin' },
       { path: '/settings', icon: Settings, label: 'Ayarlar' },
     ];
   } else if (isTeacherMode) {
     tabs = [
       { path: '/', icon: Users, label: 'Öğrenciler' },
       { path: '/settings', icon: Settings, label: 'Ayarlar' },
-      ...(isAdmin ? [{ path: '/admin', icon: Shield, label: 'Admin' }] : []),
     ];
   } else {
     tabs = [
@@ -29,7 +27,6 @@ export const BottomNav = () => {
       { path: '/planning', icon: Calendar, label: 'Planlama' },
       { path: '/analytics', icon: BarChart3, label: 'Analiz' },
       { path: '/settings', icon: Settings, label: 'Ayarlar' },
-      ...(isAdmin ? [{ path: '/admin', icon: Shield, label: 'Admin' }] : []),
     ];
   }
 

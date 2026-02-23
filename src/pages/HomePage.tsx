@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { ChevronDown, Coffee, Play, Plus, Search, Zap } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { PendingPlanNotification } from '@/components/PendingPlanNotification';
 import { Button } from '@/components/ui/button';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger,
@@ -410,6 +411,8 @@ export default function HomePage() {
 
   return (
     <div className="px-4 pt-4 flex flex-col h-[calc(100vh-5rem)]">
+      {/* Pending plan notifications */}
+      <PendingPlanNotification />
       {/* TOP: Accordion */}
       <div className="relative z-20 mb-2">
         <button

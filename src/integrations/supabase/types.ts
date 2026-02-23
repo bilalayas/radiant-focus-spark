@@ -48,7 +48,9 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          messages: Json
           plan_data: Json
+          rejection_reason: string | null
           status: string
           student_id: string
           teacher_id: string
@@ -57,7 +59,9 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          messages?: Json
           plan_data?: Json
+          rejection_reason?: string | null
           status?: string
           student_id: string
           teacher_id: string
@@ -66,7 +70,9 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          messages?: Json
           plan_data?: Json
+          rejection_reason?: string | null
           status?: string
           student_id?: string
           teacher_id?: string
@@ -215,6 +221,7 @@ export type Database = {
           id: string
           name: string
           planned_duration: number | null
+          source: string
           start_hour: number | null
           user_id: string
         }
@@ -225,6 +232,7 @@ export type Database = {
           id?: string
           name: string
           planned_duration?: number | null
+          source?: string
           start_hour?: number | null
           user_id: string
         }
@@ -235,6 +243,7 @@ export type Database = {
           id?: string
           name?: string
           planned_duration?: number | null
+          source?: string
           start_hour?: number | null
           user_id?: string
         }

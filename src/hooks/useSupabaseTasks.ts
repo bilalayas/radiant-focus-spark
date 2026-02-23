@@ -32,6 +32,7 @@ export function useSupabaseTasks() {
         plannedDuration: row.planned_duration ?? undefined,
         startHour: row.start_hour ?? undefined,
         dates: row.dates ?? [],
+        source: (row as any).source ?? 'self',
       })));
     } else if (error) {
       // Fallback to cache on error
@@ -53,6 +54,7 @@ export function useSupabaseTasks() {
       planned_duration: task.plannedDuration ?? null,
       start_hour: task.startHour ?? null,
       dates: task.dates,
+      source: task.source ?? 'self',
     };
 
     // Optimistic update
