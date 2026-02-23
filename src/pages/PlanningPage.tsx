@@ -92,10 +92,20 @@ export default function PlanningPage() {
     [dayTasks]
   );
 
-  const allOtherTasks = useMemo(() =>
-    tasks.filter(t => !t.dates.includes(dateStr)),
-    [tasks, dateStr]
-  );
+  const allOtherTasks = useMemo(() => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    const oneWeekAgoStr = format(oneWeekAgo, 'yyyy-MM-dd');
+    
+    return tasks.filter(t => {
+      if (t.dates.includes(dateStr)) return false;
+      // If viewing a date older than 1 week, show all tasks
+      if (dateStr < oneWeekAgoStr) return true;
+      // Otherwise only show tasks that have dates within the last week or no dates or future dates
+      const hasRecentOrFutureDates = t.dates.length === 0 || t.dates.some(d => d >= oneWeekAgoStr);
+      return hasRecentOrFutureDates;
+    });
+  }, [tasks, dateStr]);
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -631,13 +641,21 @@ function TaskCard({ task, dateStr, isCompleted, onToggle, onDelete, compact }: {
   task: Task; dateStr: string; isCompleted: boolean;
   onToggle: () => void; onDelete: () => void; compact?: boolean;
 }) {
+  const isTeacherTask = task.source === 'teacher';
   return (
-    <div className={`flex items-center gap-2.5 bg-card rounded-xl ${compact ? 'px-3 py-2.5' : 'px-4 py-3'} border border-border shadow-sm w-full`}>
+    <div className={`flex items-center gap-2.5 rounded-xl ${compact ? 'px-3 py-2.5' : 'px-4 py-3'} border shadow-sm w-full ${
+      isTeacherTask ? 'bg-primary/5 border-primary/20' : 'bg-card border-border'
+    }`}>
       <Checkbox checked={isCompleted} onCheckedChange={onToggle} className="rounded-md shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isCompleted ? 'line-through text-muted-foreground' : 'text-card-foreground'}`}>
-          {task.name}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className={`text-sm font-medium truncate ${isCompleted ? 'line-through text-muted-foreground' : 'text-card-foreground'}`}>
+            {task.name}
+          </p>
+          {isTeacherTask && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium shrink-0">Koç</span>
+          )}
+        </div>
         {(task.category || task.plannedDuration) && (
           <div className="flex gap-2 mt-0.5">
             {task.category && <span className="text-[10px] text-muted-foreground">{task.category}</span>}

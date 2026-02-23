@@ -41,7 +41,6 @@ function AppRoutes() {
     );
   }
 
-  // Check onboarding from profile use_case (persisted in Supabase)
   const onboardingDone = !!profile?.use_case || settings.onboardingDone;
 
   if (!onboardingDone) {
@@ -53,40 +52,29 @@ function AppRoutes() {
     );
   }
 
-  // Admin mode
-  if (activeRole === 'admin' && hasRole('admin')) {
-    return (
-      <Routes>
-        <Route path="/" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
-        <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
-        <Route path="/auth" element={<Navigate to="/admin" replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    );
-  }
+  // Determine home page based on active role
+  const isAdminMode = activeRole === 'admin' && hasRole('admin');
+  const isTeacherMode = activeRole === 'teacher' && hasRole('teacher');
 
-  // Teacher mode
-  if (activeRole === 'teacher' && hasRole('teacher')) {
-    return (
-      <Routes>
-        <Route path="/" element={<AppLayout><TeacherDashboard /></AppLayout>} />
-        <Route path="/student/:studentId" element={<AppLayout><StudentDetailPage /></AppLayout>} />
-        <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
-        <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
-        <Route path="/auth" element={<Navigate to="/" replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    );
-  }
+  const getHomePage = () => {
+    if (isAdminMode) return <AdminPage />;
+    if (isTeacherMode) return <TeacherDashboard />;
+    return <HomePage />;
+  };
 
+  // All routes available, role determines home page and visible tabs
   return (
     <Routes>
-      <Route path="/" element={<AppLayout><HomePage /></AppLayout>} />
+      <Route path="/" element={<AppLayout>{getHomePage()}</AppLayout>} />
       <Route path="/planning" element={<AppLayout><PlanningPage /></AppLayout>} />
       <Route path="/analytics" element={<AppLayout><AnalyticsPage /></AppLayout>} />
       <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
-      <Route path="/admin" element={<AppLayout><AdminPage /></AppLayout>} />
+      <Route path="/admin" element={
+        hasRole('admin') ? <AppLayout><AdminPage /></AppLayout> : <Navigate to="/" replace />
+      } />
+      <Route path="/student/:studentId" element={
+        hasRole('teacher') ? <AppLayout><StudentDetailPage /></AppLayout> : <Navigate to="/" replace />
+      } />
       <Route path="/onboarding" element={<Navigate to="/" replace />} />
       <Route path="/auth" element={<Navigate to="/" replace />} />
       <Route path="*" element={<NotFound />} />
