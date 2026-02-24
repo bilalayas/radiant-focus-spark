@@ -1,10 +1,17 @@
+import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Users, Settings } from 'lucide-react';
+import { Users, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Input } from '@/components/ui/input';
 
 export default function TeacherDashboard() {
   const { acceptedStudents, profile } = useApp();
   const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+
+  const filtered = search
+    ? acceptedStudents.filter(s => (s.student_name || '').toLowerCase().includes(search.toLowerCase()))
+    : acceptedStudents;
 
   return (
     <div className="px-4 pt-6 pb-24">
@@ -18,6 +25,19 @@ export default function TeacherDashboard() {
           <Users size={16} /> Öğrencilerim ({acceptedStudents.length})
         </h2>
 
+        {/* Search */}
+        {acceptedStudents.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Öğrenci ara..."
+              className="pl-9 rounded-xl"
+            />
+          </div>
+        )}
+
         {acceptedStudents.length === 0 ? (
           <div className="bg-card rounded-2xl p-6 border border-border shadow-sm text-center">
             <p className="text-sm text-muted-foreground">Henüz kabul edilmiş öğrenciniz yok.</p>
@@ -25,9 +45,11 @@ export default function TeacherDashboard() {
               Öğrenciler referans kodunuzu kullanarak sizinle eşleşebilir.
             </p>
           </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">Sonuç bulunamadı</p>
         ) : (
           <div className="space-y-2">
-            {acceptedStudents.map(rel => (
+            {filtered.map(rel => (
               <button
                 key={rel.id}
                 onClick={() => navigate(`/student/${rel.student_id}`)}

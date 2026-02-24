@@ -4,6 +4,7 @@ import { tr } from 'date-fns/locale';
 import { useApp } from '@/context/AppContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { DailyTimeline } from '@/components/DailyTimeline';
 
 const COLORS = [
   'hsl(152,44%,34%)', 'hsl(210,55%,45%)', 'hsl(340,55%,60%)',
@@ -11,13 +12,17 @@ const COLORS = [
 ];
 
 export default function AnalyticsPage() {
-  const { sessions, tasks } = useApp();
+  const { sessions, tasks, isTaskCompleted, getTasksForDate, getSessionsForDate } = useApp();
   const [durationRange, setDurationRange] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todaySessions = getSessionsForDate(todayStr);
+  const todayTasks = getTasksForDate(todayStr);
+  const allTasksCompleted = todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr));
 
   const durationData = useMemo(() => {
     const today = new Date();
     let days: Date[];
-
     if (durationRange === 'daily') {
       days = Array.from({ length: 7 }, (_, i) => subDays(today, 6 - i));
     } else if (durationRange === 'weekly') {
@@ -25,37 +30,22 @@ export default function AnalyticsPage() {
     } else {
       days = Array.from({ length: 6 }, (_, i) => subDays(today, (5 - i) * 30));
     }
-
     return days.map(day => {
       const dateStr = format(day, 'yyyy-MM-dd');
       let matchingSessions;
-
       if (durationRange === 'daily') {
         matchingSessions = sessions.filter(s => s.date === dateStr && s.type === 'work');
       } else if (durationRange === 'weekly') {
         const weekS = startOfWeek(day, { weekStartsOn: 1 });
         const weekE = endOfWeek(day, { weekStartsOn: 1 });
-        matchingSessions = sessions.filter(s => {
-          const d = new Date(s.date);
-          return s.type === 'work' && isWithinInterval(d, { start: weekS, end: weekE });
-        });
+        matchingSessions = sessions.filter(s => { const d = new Date(s.date); return s.type === 'work' && isWithinInterval(d, { start: weekS, end: weekE }); });
       } else {
         const monthS = startOfMonth(day);
         const monthE = endOfMonth(day);
-        matchingSessions = sessions.filter(s => {
-          const d = new Date(s.date);
-          return s.type === 'work' && isWithinInterval(d, { start: monthS, end: monthE });
-        });
+        matchingSessions = sessions.filter(s => { const d = new Date(s.date); return s.type === 'work' && isWithinInterval(d, { start: monthS, end: monthE }); });
       }
-
       const totalMinutes = Math.round(matchingSessions.reduce((sum, s) => sum + s.duration, 0) / 60);
-
-      const label = durationRange === 'daily'
-        ? format(day, 'EEE', { locale: tr })
-        : durationRange === 'weekly'
-        ? `H${format(day, 'w')}`
-        : format(day, 'MMM', { locale: tr });
-
+      const label = durationRange === 'daily' ? format(day, 'EEE', { locale: tr }) : durationRange === 'weekly' ? `H${format(day, 'w')}` : format(day, 'MMM', { locale: tr });
       return { label, minutes: totalMinutes };
     });
   }, [sessions, durationRange]);
@@ -67,10 +57,7 @@ export default function AnalyticsPage() {
       const cat = task?.category || 'Diğer';
       catMap[cat] = (catMap[cat] || 0) + s.duration;
     });
-    return Object.entries(catMap).map(([name, seconds]) => ({
-      name,
-      value: Math.round(seconds / 60),
-    }));
+    return Object.entries(catMap).map(([name, seconds]) => ({ name, value: Math.round(seconds / 60) }));
   }, [sessions, tasks]);
 
   const predictionData = useMemo(() => {
@@ -86,16 +73,14 @@ export default function AnalyticsPage() {
     });
     return Object.entries(taskMap).map(([name, data]) => ({
       name: name.length > 12 ? name.slice(0, 12) + '...' : name,
-      planned: data.planned,
-      actual: data.actual,
+      planned: data.planned, actual: data.actual,
       diff: data.actual - data.planned,
       pct: Math.round(((data.actual - data.planned) / data.planned) * 100),
     }));
   }, [sessions, tasks]);
 
   const avgDeviation = predictionData.length > 0
-    ? Math.round(predictionData.reduce((sum, d) => sum + Math.abs(d.pct), 0) / predictionData.length)
-    : 0;
+    ? Math.round(predictionData.reduce((sum, d) => sum + Math.abs(d.pct), 0) / predictionData.length) : 0;
 
   const formatMin = (m: number) => {
     if (m >= 60) return `${Math.floor(m / 60)}s ${m % 60}dk`;
@@ -103,8 +88,13 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="px-4 pt-6">
+    <div className="px-4 pt-6 pb-24">
       <h1 className="text-lg font-bold mb-4 text-foreground">Analiz</h1>
+
+      {/* Daily Timeline */}
+      <div className="mb-4">
+        <DailyTimeline sessions={todaySessions} tasks={tasks} allTasksCompleted={allTasksCompleted} />
+      </div>
 
       <Tabs defaultValue="duration">
         <TabsList className="w-full rounded-xl mb-4">
@@ -115,59 +105,31 @@ export default function AnalyticsPage() {
         <TabsContent value="duration" className="space-y-4">
           <div className="flex gap-1 bg-muted rounded-xl p-1">
             {(['daily', 'weekly', 'monthly'] as const).map(r => (
-              <button
-                key={r}
-                onClick={() => setDurationRange(r)}
-                className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${
-                  durationRange === r
-                    ? 'bg-card text-foreground font-medium shadow-sm'
-                    : 'text-muted-foreground'
-                }`}
-              >
+              <button key={r} onClick={() => setDurationRange(r)} className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${durationRange === r ? 'bg-card text-foreground font-medium shadow-sm' : 'text-muted-foreground'}`}>
                 {r === 'daily' ? 'Günlük' : r === 'weekly' ? 'Haftalık' : 'Aylık'}
               </button>
             ))}
           </div>
-
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
             <p className="text-xs text-muted-foreground mb-3">Çalışma Süresi (dk)</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={durationData} margin={{ top: 20, right: 4, left: 4, bottom: 0 }}>
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis hide />
-                <Tooltip
-                  formatter={(v: number) => [formatMin(v), 'Süre']}
-                  contentStyle={{ borderRadius: 12, fontSize: 12 }}
-                />
+                <Tooltip formatter={(v: number) => [formatMin(v), 'Süre']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
                 <Bar dataKey="minutes" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]}
-                  label={{
-                    position: 'top',
-                    formatter: (v: number) => v > 0 ? `${v}dk` : '',
-                    fontSize: 9,
-                    fill: 'hsl(var(--muted-foreground))',
-                  }}
+                  label={{ position: 'top', formatter: (v: number) => v > 0 ? `${v}dk` : '', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
                 />
               </BarChart>
             </ResponsiveContainer>
           </div>
-
           {categoryData.length > 0 && (
             <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
               <p className="text-xs text-muted-foreground mb-3">Kategori Dağılımı</p>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie
-                    data={categoryData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    innerRadius={40}
-                  >
-                    {categoryData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
+                  <Pie data={categoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={40}>
+                    {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => [formatMin(v), 'Süre']} />
                 </PieChart>
@@ -176,10 +138,7 @@ export default function AnalyticsPage() {
                 {categoryData.map((c, i) => (
                   <div key={c.name} className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ background: COLORS[i % COLORS.length] }}
-                      />
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
                       <span className="text-xs text-foreground truncate">{c.name}</span>
                     </div>
                     <span className="text-xs font-medium text-muted-foreground shrink-0">{formatMin(c.value)}</span>
@@ -193,9 +152,7 @@ export default function AnalyticsPage() {
         <TabsContent value="prediction" className="space-y-4">
           {predictionData.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-sm text-muted-foreground">
-                Henüz yeterli veri yok. Planlanan süresi olan görevleri tamamladığınızda burada görünecek.
-              </p>
+              <p className="text-sm text-muted-foreground">Henüz yeterli veri yok.</p>
             </div>
           ) : (
             <>
@@ -203,7 +160,6 @@ export default function AnalyticsPage() {
                 <p className="text-xs text-muted-foreground mb-1">Ortalama Sapma</p>
                 <p className="text-2xl font-bold text-foreground">%{avgDeviation}</p>
               </div>
-
               <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
                 <p className="text-xs text-muted-foreground mb-3">Planlanan vs Gerçekleşen (dk)</p>
                 <ResponsiveContainer width="100%" height={200}>
@@ -216,16 +172,13 @@ export default function AnalyticsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-
               <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
                 <p className="text-xs text-muted-foreground mb-3">Yüzdesel Fark</p>
                 <div className="space-y-2">
                   {predictionData.map(d => (
                     <div key={d.name} className="flex items-center justify-between">
                       <span className="text-sm text-card-foreground truncate flex-1">{d.name}</span>
-                      <span className={`text-sm font-medium ml-2 ${
-                        d.pct > 0 ? 'text-destructive' : 'text-primary'
-                      }`}>
+                      <span className={`text-sm font-medium ml-2 ${d.pct > 0 ? 'text-destructive' : 'text-primary'}`}>
                         {d.pct > 0 ? '+' : ''}{d.pct}%
                       </span>
                     </div>

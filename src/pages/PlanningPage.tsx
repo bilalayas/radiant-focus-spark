@@ -1,13 +1,13 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { format, getDaysInMonth, addMonths, subMonths } from 'date-fns';
-import { Plus, Trash2, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, List, ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-// useSupabaseTasks is now consumed via AppContext
 import { useTemplates, TaskTemplate } from '@/hooks/useTemplates';
 import { Task, YKS_TYT_SUBJECTS, YKS_AYT_SUBJECTS } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer';
@@ -30,6 +30,36 @@ export default function PlanningPage() {
 
   const addTask = (task: Omit<Task, 'id'>) => { addTaskContext(task); };
   const { templates, addTemplate, deleteTemplate } = useTemplates();
+
+  // Undo state
+  const [lastDeleted, setLastDeleted] = useState<Task | null>(null);
+  const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleDeleteTask = useCallback((taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    setLastDeleted(task);
+    deleteTask(taskId);
+    
+    // Clear previous timeout
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    
+    toast('Görev silindi', {
+      action: {
+        label: 'Geri Al',
+        onClick: () => {
+          if (task) {
+            addTaskContext({ name: task.name, category: task.category, plannedDuration: task.plannedDuration, startHour: task.startHour, dates: task.dates, source: task.source });
+            setLastDeleted(null);
+            toast.success('Görev geri alındı');
+          }
+        },
+      },
+      duration: 5000,
+    });
+    
+    undoTimeoutRef.current = setTimeout(() => setLastDeleted(null), 5000);
+  }, [tasks, deleteTask, addTaskContext]);
 
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -350,7 +380,7 @@ export default function PlanningPage() {
               dateStr={dateStr}
               isCompleted={isTaskCompleted(task.id, dateStr)}
               onToggle={() => toggleTaskCompletion(task.id, dateStr)}
-              onDelete={() => deleteTask(task.id)}
+              onDelete={() => handleDeleteTask(task.id)}
             />
           ))}
         </div>
@@ -374,7 +404,7 @@ export default function PlanningPage() {
                       dateStr={dateStr}
                       isCompleted={isTaskCompleted(task.id, dateStr)}
                       onToggle={() => toggleTaskCompletion(task.id, dateStr)}
-                      onDelete={() => deleteTask(task.id)}
+                      onDelete={() => handleDeleteTask(task.id)}
                     />
                   </div>
                 ))}
@@ -432,7 +462,7 @@ export default function PlanningPage() {
                         dateStr={dateStr}
                         isCompleted={isTaskCompleted(task.id, dateStr)}
                         onToggle={() => toggleTaskCompletion(task.id, dateStr)}
-                        onDelete={() => deleteTask(task.id)}
+                        onDelete={() => handleDeleteTask(task.id)}
                         compact
                       />
                     </div>
