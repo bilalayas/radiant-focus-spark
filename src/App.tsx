@@ -52,7 +52,6 @@ function AppRoutes() {
     );
   }
 
-  // Determine home page based on active role
   const isAdminMode = activeRole === 'admin' && hasRole('admin');
   const isTeacherMode = activeRole === 'teacher' && hasRole('teacher');
 
@@ -62,22 +61,27 @@ function AppRoutes() {
     return <HomePage />;
   };
 
-  // All routes available, role determines home page and visible tabs
   return (
     <Routes>
       <Route path="/" element={<AppLayout>{getHomePage()}</AppLayout>} />
-      <Route path="/planning" element={<AppLayout><PlanningPage /></AppLayout>} />
-      <Route path="/analytics" element={<AppLayout><AnalyticsPage /></AppLayout>} />
-      <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
-      <Route path="/admin" element={
-        hasRole('admin') ? <AppLayout><AdminPage /></AppLayout> : <Navigate to="/" replace />
+      {/* Student-only routes - redirect to home if not in student mode */}
+      <Route path="/planning" element={
+        !isAdminMode && !isTeacherMode
+          ? <AppLayout><PlanningPage /></AppLayout>
+          : <Navigate to="/" replace />
       } />
+      <Route path="/analytics" element={
+        !isAdminMode && !isTeacherMode
+          ? <AppLayout><AnalyticsPage /></AppLayout>
+          : <Navigate to="/" replace />
+      } />
+      <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
       <Route path="/student/:studentId" element={
         hasRole('teacher') ? <AppLayout><StudentDetailPage /></AppLayout> : <Navigate to="/" replace />
       } />
       <Route path="/onboarding" element={<Navigate to="/" replace />} />
       <Route path="/auth" element={<Navigate to="/" replace />} />
-      <Route path="*" element={<NotFound />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

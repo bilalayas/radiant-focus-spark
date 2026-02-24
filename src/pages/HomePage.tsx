@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { ChevronDown, Coffee, Play, Plus, Search, Zap } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { PendingPlanNotification } from '@/components/PendingPlanNotification';
+import { DailyTimeline } from '@/components/DailyTimeline';
 import { Button } from '@/components/ui/button';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger,
@@ -624,8 +625,13 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Daily Timeline */}
+      <div className="mb-2 shrink-0">
+        <DailyTimeline sessions={todaySessions} tasks={tasks} allTasksCompleted={todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr))} />
+      </div>
+
       {/* BOTTOM: Day Summary Carousel */}
-      <div className="mt-2 pb-1 shrink-0">
+      <div className="mt-1 pb-1 shrink-0">
         <div
           className="relative overflow-hidden"
           onTouchStart={e => { e.stopPropagation(); setSummaryTouchX(e.touches[0].clientX); }}

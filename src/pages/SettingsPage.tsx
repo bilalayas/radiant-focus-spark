@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ColorPalette, paletteNames, PlanningMode } from '@/types';
-import { Download, Trash2, Sun, Moon, LogOut, Save, User, Copy, Check, UserPlus, GraduationCap, ArrowLeftRight, Lock, Eye, EyeOff } from 'lucide-react';
+import { Download, Trash2, Sun, Moon, LogOut, Save, User, Copy, Check, UserPlus, GraduationCap, ArrowLeftRight, Lock, Eye, EyeOff, ChevronDown, ChevronUp, MessageSquare, Send, Search } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -13,8 +14,12 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 export default function SettingsPage() {
   const {
@@ -25,6 +30,7 @@ export default function SettingsPage() {
     sendCoachRequest, respondToCoachRequest, lookupReferralCode, refetchCoach,
   } = useApp();
   const { signOut, updatePassword } = useAuth();
+  const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [nameEditing, setNameEditing] = useState(false);
@@ -43,12 +49,32 @@ export default function SettingsPage() {
   const [showNewPw, setShowNewPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
 
+  // Collapsible states
+  const [referralOpen, setReferralOpen] = useState(false);
+  const [studentsOpen, setStudentsOpen] = useState(true);
+  const [studentSearch, setStudentSearch] = useState('');
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatTeacher, setChatTeacher] = useState<{ id: string; teacher_id: string; teacher_name: string } | null>(null);
+  const [chatMessages, setChatMessages] = useState<Array<{ from: string; text: string; timestamp: string }>>([]);
+  const [chatText, setChatText] = useState('');
+  const [chatPlanId, setChatPlanId] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   const isTeacher = hasRole('teacher');
   const isAdmin = hasRole('admin');
   const hasMultipleRoles = roles.length > 1 || isTeacher || isAdmin;
   const isExamOrUni = settings.useCase === 'exam' || settings.useCase === 'university';
   const isTeacherMode = activeRole === 'teacher' && isTeacher;
   const isAdminMode = activeRole === 'admin' && isAdmin;
+  const isStudentMode = !isTeacherMode && !isAdminMode;
+
+  useEffect(() => {
+    if (chatOpen && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, chatOpen]);
 
   const handleExport = () => {
     const data = exportData();
@@ -67,9 +93,7 @@ export default function SettingsPage() {
     toast.success('Profil güncellendi');
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-  };
+  const handleSignOut = async () => { await signOut(); };
 
   const handleCopyCode = () => {
     if (referralCode) {
@@ -85,14 +109,8 @@ export default function SettingsPage() {
     setLookupError('');
     setLookupResult(null);
     const result = await lookupReferralCode(refCode.trim().toUpperCase());
-    if (!result) {
-      setLookupError('Kod bulunamadı');
-      return;
-    }
-    if (result.user_id === user?.id) {
-      setLookupError('Kendi kodunuzu kullanamazsınız');
-      return;
-    }
+    if (!result) { setLookupError('Kod bulunamadı'); return; }
+    if (result.user_id === user?.id) { setLookupError('Kendi kodunuzu kullanamazsınız'); return; }
     setLookupResult(result);
   };
 
@@ -119,24 +137,63 @@ export default function SettingsPage() {
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      toast.error('Şifre en az 6 karakter olmalı');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error('Şifreler eşleşmiyor');
-      return;
-    }
+    if (newPassword.length < 6) { toast.error('Şifre en az 6 karakter olmalı'); return; }
+    if (newPassword !== confirmPassword) { toast.error('Şifreler eşleşmiyor'); return; }
     setChangingPassword(true);
     const { error } = await updatePassword(newPassword);
     setChangingPassword(false);
-    if (error) {
-      toast.error(error.message);
+    if (error) { toast.error(error.message); }
+    else { toast.success('Şifre güncellendi!'); setPasswordDialogOpen(false); setNewPassword(''); setConfirmPassword(''); }
+  };
+
+  // Open chat with a teacher
+  const openTeacherChat = async (rel: { id: string; teacher_id: string; teacher_name?: string }) => {
+    setChatTeacher({ id: rel.id, teacher_id: rel.teacher_id, teacher_name: rel.teacher_name || 'İsimsiz' });
+    // Find the latest plan between this teacher and student to use as chat channel
+    const { data } = await supabase
+      .from('pending_plans')
+      .select('*')
+      .eq('teacher_id', rel.teacher_id)
+      .eq('student_id', user?.id || '')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    
+    if (data && data.length > 0) {
+      const plan = data[0];
+      setChatPlanId(plan.id);
+      setChatMessages(Array.isArray((plan as any).messages) ? (plan as any).messages : []);
     } else {
-      toast.success('Şifre güncellendi!');
-      setPasswordDialogOpen(false);
-      setNewPassword('');
-      setConfirmPassword('');
+      // Create a new plan entry as chat channel
+      const { data: newPlan } = await supabase
+        .from('pending_plans')
+        .insert({
+          teacher_id: rel.teacher_id,
+          student_id: user?.id || '',
+          plan_data: [],
+          status: 'chat',
+          messages: [],
+        })
+        .select()
+        .single();
+      if (newPlan) {
+        setChatPlanId(newPlan.id);
+        setChatMessages([]);
+      }
+    }
+    setChatOpen(true);
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!chatText.trim() || !chatPlanId || !user) return;
+    const newMsg = { from: user.id, text: chatText.trim(), timestamp: new Date().toISOString() };
+    const updated = [...chatMessages, newMsg];
+    const { error } = await supabase
+      .from('pending_plans')
+      .update({ messages: updated as any })
+      .eq('id', chatPlanId);
+    if (!error) {
+      setChatMessages(updated);
+      setChatText('');
     }
   };
 
@@ -153,6 +210,10 @@ export default function SettingsPage() {
     if (isAdmin) options.push({ value: 'admin', label: 'Admin' });
     return options;
   };
+
+  const filteredStudents = studentSearch
+    ? acceptedStudents.filter(s => (s.student_name || '').toLowerCase().includes(studentSearch.toLowerCase()))
+    : acceptedStudents;
 
   return (
     <div className="px-4 pt-6 pb-24">
@@ -171,51 +232,28 @@ export default function SettingsPage() {
             <div className="flex-1 min-w-0">
               {nameEditing ? (
                 <div className="flex gap-2">
-                  <Input
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                    className="h-8 rounded-lg text-sm"
-                    placeholder="Ad Soyad"
-                    autoFocus
-                  />
-                  <Button size="sm" onClick={handleSaveName} className="h-8 rounded-lg">
-                    <Save size={12} />
-                  </Button>
+                  <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="h-8 rounded-lg text-sm" placeholder="Ad Soyad" autoFocus />
+                  <Button size="sm" onClick={handleSaveName} className="h-8 rounded-lg"><Save size={12} /></Button>
                 </div>
               ) : (
-                <button
-                  onClick={() => { setDisplayName(profile?.display_name || ''); setNameEditing(true); }}
-                  className="text-sm font-medium text-foreground hover:text-primary transition-colors text-left"
-                >
+                <button onClick={() => { setDisplayName(profile?.display_name || ''); setNameEditing(true); }} className="text-sm font-medium text-foreground hover:text-primary transition-colors text-left">
                   {profile?.display_name || 'İsim belirle'}
                 </button>
               )}
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-              {/* Role badges */}
               <div className="flex gap-1.5 mt-1">
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent text-accent-foreground">
                   {isExamOrUni ? 'Öğrenci' : useCaseLabel(settings.useCase || 'free')}
                 </span>
-                {isTeacher && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                    Öğretmen
-                  </span>
-                )}
-                {isAdmin && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">
-                    Admin
-                  </span>
-                )}
+                {isTeacher && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Öğretmen</span>}
+                {isAdmin && <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">Admin</span>}
               </div>
             </div>
           </div>
 
-          {/* Role switching for users with multiple roles */}
           {hasMultipleRoles && (
             <div className="flex items-center justify-between pt-2 border-t border-border">
-              <span className="text-sm text-muted-foreground flex items-center gap-2">
-                <ArrowLeftRight size={14} /> Aktif Rol
-              </span>
+              <span className="text-sm text-muted-foreground flex items-center gap-2"><ArrowLeftRight size={14} /> Aktif Rol</span>
               <Select value={activeRole} onValueChange={setActiveRole}>
                 <SelectTrigger className="w-[140px] h-8 rounded-lg text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -227,66 +265,41 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Password change + Sign out */}
           <div className="flex gap-2 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPasswordDialogOpen(true)}
-              className="flex-1 rounded-xl"
-            >
+            <Button variant="outline" size="sm" onClick={() => setPasswordDialogOpen(true)} className="flex-1 rounded-xl">
               <Lock size={14} className="mr-2" /> Şifre Değiştir
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="flex-1 rounded-xl text-destructive border-destructive/30 hover:bg-destructive/5"
-            >
+            <Button variant="outline" size="sm" onClick={handleSignOut} className="flex-1 rounded-xl text-destructive border-destructive/30 hover:bg-destructive/5">
               <LogOut size={14} className="mr-2" /> Çıkış
             </Button>
           </div>
         </div>
 
-        {/* Coach Section - Student Mode: Koçlarım */}
-        {!isTeacherMode && !isAdminMode && isExamOrUni && (
+        {/* ─── STUDENT MODE: Koçum ─── */}
+        {isStudentMode && isExamOrUni && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
-              <GraduationCap size={14} /> Koçla Çalış
+              <GraduationCap size={14} /> {acceptedTeachers.length > 0 ? 'Koçum' : 'Koçla Çalış'}
             </h3>
 
-            {/* Referral code display + input */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between bg-muted rounded-xl px-3 py-2.5">
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Referans Kodun</p>
-                  <p className="text-sm font-mono font-bold text-foreground">{referralCode || '...'}</p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-8 w-8 p-0">
-                  {copied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
-                </Button>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full rounded-xl"
-                onClick={() => setCoachDialogOpen(true)}
-              >
-                <UserPlus size={14} className="mr-2" /> Referans Kodu Gir
-              </Button>
-            </div>
-
-            {/* Connected teachers */}
+            {/* Connected teachers - prominent */}
             {acceptedTeachers.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1.5">Koçlarım</p>
+              <div className="space-y-1.5">
                 {acceptedTeachers.map(rel => (
-                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl mb-1">
-                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                  <button
+                    key={rel.id}
+                    onClick={() => openTeacherChat(rel)}
+                    className="w-full flex items-center gap-3 px-3 py-3 bg-accent/50 rounded-xl hover:bg-accent transition-colors text-left"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
                       {(rel.teacher_name || '?')[0].toUpperCase()}
                     </div>
-                    <span className="text-sm text-foreground">{rel.teacher_name || 'İsimsiz'}</span>
-                  </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground">{rel.teacher_name || 'İsimsiz'}</span>
+                      <p className="text-[10px] text-muted-foreground">Mesaj göndermek için tıkla</p>
+                    </div>
+                    <MessageSquare size={16} className="text-muted-foreground" />
+                  </button>
                 ))}
               </div>
             )}
@@ -308,40 +321,81 @@ export default function SettingsPage() {
                 ))}
               </div>
             )}
+
+            {/* Collapsible Referral Section */}
+            <Collapsible open={referralOpen} onOpenChange={setReferralOpen}>
+              <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full py-1">
+                {referralOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <span>Referans İşlemleri</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                <div className="flex items-center justify-between bg-muted rounded-xl px-3 py-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Referans Kodun</p>
+                    <p className="text-xs font-mono font-bold text-foreground">{referralCode || '...'}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-7 w-7 p-0">
+                    {copied ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" className="w-full rounded-xl text-xs" onClick={() => setCoachDialogOpen(true)}>
+                  <UserPlus size={12} className="mr-2" /> Referans Kodu Gir
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
 
-        {/* Coach Section - Teacher Mode: Öğrencilerim */}
+        {/* ─── TEACHER MODE: Öğrencilerim ─── */}
         {isTeacherMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground flex items-center gap-2">
               <GraduationCap size={14} /> Öğrencilerim
             </h3>
 
-            {/* Referral code display */}
-            <div className="flex items-center justify-between bg-muted rounded-xl px-3 py-2.5">
+            {/* Referral code - always visible for teacher */}
+            <div className="flex items-center justify-between bg-muted rounded-xl px-3 py-2">
               <div>
                 <p className="text-[10px] text-muted-foreground">Referans Kodun</p>
-                <p className="text-sm font-mono font-bold text-foreground">{referralCode || '...'}</p>
+                <p className="text-xs font-mono font-bold text-foreground">{referralCode || '...'}</p>
               </div>
-              <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-8 w-8 p-0">
-                {copied ? <Check size={14} className="text-primary" /> : <Copy size={14} />}
+              <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-7 w-7 p-0">
+                {copied ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
               </Button>
             </div>
 
-            {/* Connected students */}
-            {acceptedStudents.length > 0 && (
-              <div>
-                {acceptedStudents.map(rel => (
-                  <div key={rel.id} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl mb-1">
+            {/* Collapsible student list with search */}
+            <Collapsible open={studentsOpen} onOpenChange={setStudentsOpen}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
+                <span className="flex items-center gap-1">
+                  {studentsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  Öğrenci Listesi ({acceptedStudents.length})
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                {acceptedStudents.length > 2 && (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+                    <Input value={studentSearch} onChange={e => setStudentSearch(e.target.value)} placeholder="Ara..." className="pl-8 h-8 rounded-xl text-xs" />
+                  </div>
+                )}
+                {filteredStudents.map(rel => (
+                  <button
+                    key={rel.id}
+                    onClick={() => navigate(`/student/${rel.student_id}`)}
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-xl hover:bg-accent transition-colors text-left"
+                  >
                     <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
                       {(rel.student_name || '?')[0].toUpperCase()}
                     </div>
                     <span className="text-sm text-foreground">{rel.student_name || 'İsimsiz'}</span>
-                  </div>
+                  </button>
                 ))}
-              </div>
-            )}
+                {filteredStudents.length === 0 && acceptedStudents.length > 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">Sonuç yok</p>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Pending requests for teacher */}
             {pendingRequests.filter(r => r.student_id !== user?.id).length > 0 && (
@@ -363,8 +417,8 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Notifications - hide in teacher/admin mode */}
-        {!isTeacherMode && !isAdminMode && (
+        {/* Notifications - student mode only */}
+        {isStudentMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
             <h3 className="text-sm font-semibold mb-3 text-card-foreground">Bildirim Ayarları</h3>
             <div className="flex items-center justify-between">
@@ -374,8 +428,8 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Planning Hours - hide in teacher/admin mode */}
-        {!isTeacherMode && !isAdminMode && (
+        {/* Planning Hours - student mode only */}
+        {isStudentMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground">Planlama</h3>
             <div className="flex items-center justify-between">
@@ -402,10 +456,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Planlama Türü</span>
-              <Select
-                value={settings.planningMode ?? 'timestamp'}
-                onValueChange={(v: PlanningMode) => updateSettings({ planningMode: v })}
-              >
+              <Select value={settings.planningMode ?? 'timestamp'} onValueChange={(v: PlanningMode) => updateSettings({ planningMode: v })}>
                 <SelectTrigger className="w-[160px] h-8 rounded-lg text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="timestamp">Zaman Damgasına Göre</SelectItem>
@@ -416,8 +467,8 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Use Case - hide in teacher/admin mode */}
-        {!isTeacherMode && !isAdminMode && (
+        {/* Use Case - student mode only */}
+        {isStudentMode && (
           <div className="bg-card rounded-2xl p-4 border border-border shadow-sm space-y-3">
             <h3 className="text-sm font-semibold text-card-foreground">Kullanım Amacı</h3>
             <Select value={settings.useCase || 'free'} onValueChange={v => updateSettings({ useCase: v })}>
@@ -438,20 +489,10 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Mod</span>
             <div className="flex gap-1 bg-muted rounded-lg p-0.5">
-              <button
-                onClick={() => updateSettings({ themeMode: 'light' })}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  settings.themeMode === 'light' ? 'bg-card text-foreground shadow-sm font-medium' : 'text-muted-foreground'
-                }`}
-              >
+              <button onClick={() => updateSettings({ themeMode: 'light' })} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs transition-colors ${settings.themeMode === 'light' ? 'bg-card text-foreground shadow-sm font-medium' : 'text-muted-foreground'}`}>
                 <Sun size={12} /> Light
               </button>
-              <button
-                onClick={() => updateSettings({ themeMode: 'dark' })}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  settings.themeMode === 'dark' ? 'bg-card text-foreground shadow-sm font-medium' : 'text-muted-foreground'
-                }`}
-              >
+              <button onClick={() => updateSettings({ themeMode: 'dark' })} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs transition-colors ${settings.themeMode === 'dark' ? 'bg-card text-foreground shadow-sm font-medium' : 'text-muted-foreground'}`}>
                 <Moon size={12} /> Dark
               </button>
             </div>
@@ -461,21 +502,11 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-2">
               {(Object.entries(paletteNames) as [ColorPalette, string][]).map(([key, name]) => {
                 const colors: Record<ColorPalette, string> = {
-                  forest: 'bg-[hsl(152,44%,34%)]',
-                  pink: 'bg-[hsl(340,55%,60%)]',
-                  blue: 'bg-[hsl(210,55%,45%)]',
-                  mono: 'bg-[hsl(0,0%,15%)]',
+                  forest: 'bg-[hsl(152,44%,34%)]', pink: 'bg-[hsl(340,55%,60%)]',
+                  blue: 'bg-[hsl(210,55%,45%)]', mono: 'bg-[hsl(0,0%,15%)]',
                 };
                 return (
-                  <button
-                    key={key}
-                    onClick={() => updateSettings({ colorPalette: key })}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all ${
-                      settings.colorPalette === key
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                        : 'border-border hover:border-primary/30'
-                    }`}
-                  >
+                  <button key={key} onClick={() => updateSettings({ colorPalette: key })} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all ${settings.colorPalette === key ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/30'}`}>
                     <div className={`w-4 h-4 rounded-full ${colors[key]}`} />
                     <span className="text-xs font-medium">{name}</span>
                   </button>
@@ -496,9 +527,7 @@ export default function SettingsPage() {
             <AlertDialogContent className="rounded-2xl max-w-sm">
               <AlertDialogHeader>
                 <AlertDialogTitle>Tüm veriler silinsin mi?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Bu işlem geri alınamaz. Tüm görevler, oturumlar ve tamamlama bilgileri silinecek.
-                </AlertDialogDescription>
+                <AlertDialogDescription>Bu işlem geri alınamaz.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel className="rounded-xl">İptal</AlertDialogCancel>
@@ -506,7 +535,6 @@ export default function SettingsPage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-
           <Button variant="outline" className="flex-1 rounded-2xl h-11" onClick={handleExport}>
             <Download size={14} className="mr-2" /> Veri Export
           </Button>
@@ -516,17 +544,10 @@ export default function SettingsPage() {
       {/* Coach Dialog */}
       <Dialog open={coachDialogOpen} onOpenChange={setCoachDialogOpen}>
         <DialogContent className="rounded-2xl max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Referans Kodu Gir</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Referans Kodu Gir</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="flex gap-2">
-              <Input
-                value={refCode}
-                onChange={e => setRefCode(e.target.value.toUpperCase())}
-                placeholder="CT-XXXXXX"
-                className="rounded-xl font-mono"
-              />
+              <Input value={refCode} onChange={e => setRefCode(e.target.value.toUpperCase())} placeholder="CT-XXXXXX" className="rounded-xl font-mono" />
               <Button onClick={handleLookupCode} className="rounded-xl">Ara</Button>
             </div>
             {lookupError && <p className="text-xs text-destructive">{lookupError}</p>}
@@ -536,12 +557,7 @@ export default function SettingsPage() {
                   <strong>{lookupResult.display_name}</strong>
                   {lookupResult.has_teacher_role ? ' (Öğretmen)' : ' (Kullanıcı)'}
                 </p>
-                <Button
-                  size="sm"
-                  className="w-full rounded-lg"
-                  onClick={handleSendRequest}
-                  disabled={sending}
-                >
+                <Button size="sm" className="w-full rounded-lg" onClick={handleSendRequest} disabled={sending}>
                   {sending ? 'Gönderiliyor...' : 'Çalışma İsteği Gönder'}
                 </Button>
               </div>
@@ -550,50 +566,60 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Chat Dialog */}
+      <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+        <DialogContent className="rounded-2xl max-w-sm max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare size={16} /> {chatTeacher?.teacher_name || 'Koç'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px] max-h-[50vh]">
+            {chatMessages.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-6">Henüz mesaj yok</p>
+            )}
+            {chatMessages.map((msg, i) => {
+              const isMine = msg.from === user?.id;
+              return (
+                <div key={i} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${isMine ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}`}>
+                    <p>{msg.text}</p>
+                    <p className={`text-[9px] mt-0.5 ${isMine ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                      {format(new Date(msg.timestamp), 'HH:mm')}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="flex gap-2 pt-2 border-t border-border">
+            <Input value={chatText} onChange={e => setChatText(e.target.value)} placeholder="Mesaj yaz..." className="rounded-xl text-sm" onKeyDown={e => e.key === 'Enter' && handleSendChatMessage()} />
+            <Button size="sm" onClick={handleSendChatMessage} disabled={!chatText.trim()} className="rounded-xl">
+              <Send size={14} />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Password Change Dialog */}
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent className="rounded-2xl max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Şifre Değiştir</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Şifre Değiştir</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="relative">
-              <Input
-                type={showNewPw ? 'text' : 'password'}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="Yeni şifre (min 6 karakter)"
-                className="rounded-xl pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPw(!showNewPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
+              <Input type={showNewPw ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Yeni şifre (min 6 karakter)" className="rounded-xl pr-10" />
+              <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             <div className="relative">
-              <Input
-                type={showConfirmPw ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="Şifre tekrar"
-                className="rounded-xl pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPw(!showConfirmPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
+              <Input type={showConfirmPw ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Şifre tekrar" className="rounded-xl pr-10" />
+              <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            <Button
-              onClick={handleChangePassword}
-              disabled={changingPassword || newPassword.length < 6}
-              className="w-full rounded-xl"
-            >
+            <Button onClick={handleChangePassword} disabled={changingPassword || newPassword.length < 6} className="w-full rounded-xl">
               {changingPassword ? '...' : 'Şifreyi Güncelle'}
             </Button>
           </div>
