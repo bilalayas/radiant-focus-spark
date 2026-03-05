@@ -1,9 +1,9 @@
-import { ReactNode, useRef } from 'react';
+import { ReactNode, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BottomNav } from './BottomNav';
 
-const routes = ['/', '/planning', '/analytics', '/settings'];
+const routes = ['/', '/planning', '/tests', '/analytics', '/settings'];
 
 const pageVariants = {
   enter: (direction: number) => ({
@@ -36,6 +36,23 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const currentIdx = routes.indexOf(location.pathname);
   const direction = currentIdx >= prevRouteIdx ? 1 : -1;
   prevRouteIdx = currentIdx;
+
+  // Keyboard fix: prevent layout shift on mobile when virtual keyboard opens
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    
+    const handleResize = () => {
+      const root = document.getElementById('root');
+      if (root) {
+        // When keyboard opens, visualViewport height shrinks
+        root.style.height = `${viewport.height}px`;
+      }
+    };
+    
+    viewport.addEventListener('resize', handleResize);
+    return () => viewport.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };

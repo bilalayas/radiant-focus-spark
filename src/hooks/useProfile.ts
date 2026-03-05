@@ -9,6 +9,7 @@ export interface Profile {
   avatar_url: string | null;
   use_case: string | null;
   active_role: string | null;
+  student_field: string | null;
 }
 
 export function useProfile(user: User | null) {
@@ -28,7 +29,7 @@ export function useProfile(user: User | null) {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-  const updateProfile = useCallback(async (updates: Partial<Pick<Profile, 'display_name' | 'avatar_url' | 'use_case' | 'active_role'>>) => {
+  const updateProfile = useCallback(async (updates: Partial<Pick<Profile, 'display_name' | 'avatar_url' | 'use_case' | 'active_role' | 'student_field'>>) => {
     if (!user) return;
     await supabase
       .from('profiles')

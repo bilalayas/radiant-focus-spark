@@ -436,11 +436,12 @@ export default function HomePage() {
               transition={{ duration: 0.2 }}
               className="absolute top-full left-0 right-0 z-30 overflow-hidden"
             >
-              <div className="mt-1 bg-background/95 backdrop-blur-sm rounded-2xl border border-border shadow-lg p-3 space-y-1.5">
+              <div className="mt-1 bg-background/95 backdrop-blur-sm rounded-2xl border border-border shadow-lg p-3 space-y-1.5 max-h-[40vh] overflow-y-auto">
                 {todayTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground py-2">Bugün için görev planlanmamış.</p>
                 )}
-                {todayTasks.map(task => (
+                {/* Sort: completed at bottom */}
+                {[...todayTasks.filter(t => !isTaskCompleted(t.id, todayStr)), ...todayTasks.filter(t => isTaskCompleted(t.id, todayStr))].map(task => (
                   <button
                     key={task.id}
                     onClick={() => selectTask(task.id)}
@@ -625,9 +626,11 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Daily Timeline */}
-      <div className="mb-2 shrink-0">
-        <DailyTimeline sessions={todaySessions} tasks={tasks} allTasksCompleted={todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr))} />
+      {/* Daily Timeline — scrollable */}
+      <div className="mb-2 shrink-0 overflow-x-auto scrollbar-hide -mx-4 px-4" onTouchStart={e => e.stopPropagation()}>
+        <div className="min-w-[300px]">
+          <DailyTimeline sessions={todaySessions} tasks={tasks} allTasksCompleted={todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr))} />
+        </div>
       </div>
 
       {/* BOTTOM: Day Summary Carousel */}
