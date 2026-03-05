@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Timer, Calendar, BarChart3, Settings, Users, Shield } from 'lucide-react';
+import { Timer, Calendar, BarChart3, Settings, Users, Shield, ClipboardList, Youtube } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export const BottomNav = () => {
@@ -19,12 +19,14 @@ export const BottomNav = () => {
   } else if (isTeacherMode) {
     tabs = [
       { path: '/', icon: Users, label: 'Öğrenciler' },
+      { path: '/tests', icon: ClipboardList, label: 'Testler' },
       { path: '/settings', icon: Settings, label: 'Ayarlar' },
     ];
   } else {
     tabs = [
       { path: '/', icon: Timer, label: 'Timer' },
-      { path: '/planning', icon: Calendar, label: 'Planlama' },
+      { path: '/planning', icon: Calendar, label: 'Plan' },
+      { path: '/tests', icon: ClipboardList, label: 'Test' },
       { path: '/analytics', icon: BarChart3, label: 'Analiz' },
       { path: '/settings', icon: Settings, label: 'Ayarlar' },
     ];
@@ -42,14 +44,14 @@ export const BottomNav = () => {
                 <button
                   key={tab.path}
                   onClick={() => navigate(tab.path)}
-                  className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all duration-200 ${
+                  className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 ${
                     isActive
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <tab.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
-                  <span className={`text-[10px] ${isActive ? 'font-semibold' : 'font-medium'}`}>
+                  <tab.icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                  <span className={`text-[9px] ${isActive ? 'font-semibold' : 'font-medium'}`}>
                     {tab.label}
                   </span>
                 </button>

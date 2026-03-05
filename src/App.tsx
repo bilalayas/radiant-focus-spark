@@ -16,6 +16,8 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDetailPage from "./pages/StudentDetailPage";
 import AdminPage from "./pages/AdminPage";
+import TestsPage from "./pages/TestsPage";
+import YouTubePage from "./pages/YouTubePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,7 +66,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<AppLayout>{getHomePage()}</AppLayout>} />
-      {/* Student-only routes - redirect to home if not in student mode */}
       <Route path="/planning" element={
         !isAdminMode && !isTeacherMode
           ? <AppLayout><PlanningPage /></AppLayout>
@@ -73,6 +74,16 @@ function AppRoutes() {
       <Route path="/analytics" element={
         !isAdminMode && !isTeacherMode
           ? <AppLayout><AnalyticsPage /></AppLayout>
+          : <Navigate to="/" replace />
+      } />
+      <Route path="/tests" element={
+        !isAdminMode
+          ? <AppLayout><TestsPage /></AppLayout>
+          : <Navigate to="/" replace />
+      } />
+      <Route path="/youtube" element={
+        !isAdminMode && !isTeacherMode
+          ? <AppLayout><YouTubePage /></AppLayout>
           : <Navigate to="/" replace />
       } />
       <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
