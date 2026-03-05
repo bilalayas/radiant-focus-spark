@@ -87,6 +87,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          student_field: string | null
           updated_at: string
           use_case: string | null
           user_id: string
@@ -97,6 +98,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          student_field?: string | null
           updated_at?: string
           use_case?: string | null
           user_id: string
@@ -107,6 +109,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          student_field?: string | null
           updated_at?: string
           use_case?: string | null
           user_id?: string
@@ -246,6 +249,60 @@ export type Database = {
           source?: string
           start_hour?: number | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      tests: {
+        Row: {
+          analysis_duration: number | null
+          blank_count: number
+          correct_count: number
+          created_at: string
+          created_by: string
+          date: string
+          id: string
+          name: string
+          solve_duration: number | null
+          status: string
+          subject: string
+          topic: string | null
+          total_questions: number
+          user_id: string
+          wrong_count: number
+        }
+        Insert: {
+          analysis_duration?: number | null
+          blank_count?: number
+          correct_count?: number
+          created_at?: string
+          created_by: string
+          date: string
+          id?: string
+          name: string
+          solve_duration?: number | null
+          status?: string
+          subject: string
+          topic?: string | null
+          total_questions?: number
+          user_id: string
+          wrong_count?: number
+        }
+        Update: {
+          analysis_duration?: number | null
+          blank_count?: number
+          correct_count?: number
+          created_at?: string
+          created_by?: string
+          date?: string
+          id?: string
+          name?: string
+          solve_duration?: number | null
+          status?: string
+          subject?: string
+          topic?: string | null
+          total_questions?: number
+          user_id?: string
+          wrong_count?: number
         }
         Relationships: []
       }
