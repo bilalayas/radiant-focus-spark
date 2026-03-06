@@ -283,6 +283,13 @@ export default function HomePage() {
 
   const handleStart = () => {
     if (!selectedTask) return;
+    // Auto-open link if task has a URL description
+    if (selectedTask.description) {
+      const desc = selectedTask.description;
+      if (desc.startsWith('http') || desc.startsWith('www.')) {
+        window.open(desc.startsWith('http') ? desc : `https://${desc}`, '_blank');
+      }
+    }
     timer.start(selectedTask.id, selectedTask.name);
   };
 
@@ -399,7 +406,7 @@ export default function HomePage() {
     const diff = summaryTouchX - e.changedTouches[0].clientX;
     if (Math.abs(diff) > 50) {
       setSummaryIndex(prev => {
-        if (diff > 0) return Math.min(prev + 1, 2);
+        if (diff > 0) return Math.min(prev + 1, 3);
         return Math.max(prev - 1, 0);
       });
     }
@@ -626,14 +633,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Daily Timeline — scrollable */}
-      <div className="mb-2 shrink-0 overflow-x-auto scrollbar-hide -mx-4 px-4" onTouchStart={e => e.stopPropagation()}>
-        <div className="min-w-[300px]">
-          <DailyTimeline sessions={todaySessions} tasks={tasks} allTasksCompleted={todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr))} />
-        </div>
-      </div>
-
-      {/* BOTTOM: Day Summary Carousel */}
+      {/* BOTTOM: Day Summary Carousel — Timeline is first slide */}
       <div className="mt-1 pb-1 shrink-0">
         <div
           className="relative overflow-hidden"
@@ -641,6 +641,11 @@ export default function HomePage() {
           onTouchEnd={handleSummaryTouchEnd}
         >
           <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${summaryIndex * 100}%)` }}>
+            {/* Slide 0: Daily Timeline */}
+            <div className="w-full flex-shrink-0 px-1">
+              <DailyTimeline sessions={todaySessions} tasks={tasks} allTasksCompleted={todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr))} />
+            </div>
+
             {/* Slide 1: Çalışma Özeti */}
             <div className="w-full flex-shrink-0 px-1">
               <div className="bg-card rounded-2xl p-4 shadow-sm border border-border h-[120px] flex flex-col justify-between">
@@ -698,7 +703,7 @@ export default function HomePage() {
           </div>
         </div>
         <div className="flex justify-center gap-1.5 mt-2">
-          {[0, 1, 2].map(i => (
+          {[0, 1, 2, 3].map(i => (
             <button key={i} onClick={() => setSummaryIndex(i)} className={`h-1.5 rounded-full transition-all duration-200 ${summaryIndex === i ? 'bg-primary w-4' : 'bg-muted-foreground/30 w-1.5'}`} />
           ))}
         </div>

@@ -480,6 +480,21 @@ export default function SettingsPage() {
                 <SelectItem value="free">Serbest Kullanım</SelectItem>
               </SelectContent>
             </Select>
+            {isExamOrUni && (
+              <div>
+                <span className="text-sm text-muted-foreground block mb-1.5">Alan Seçimi</span>
+                <Select value={profile?.student_field || ''} onValueChange={v => updateProfile({ student_field: v })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Alan seç" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TYT">Yalnızca TYT</SelectItem>
+                    <SelectItem value="Sayısal">AYT – Sayısal</SelectItem>
+                    <SelectItem value="Sözel">AYT – Sözel</SelectItem>
+                    <SelectItem value="Eşit Ağırlık">AYT – Eşit Ağırlık</SelectItem>
+                    <SelectItem value="Yabancı Dil">AYT – Yabancı Dil</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         )}
 

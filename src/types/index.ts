@@ -2,6 +2,7 @@ export interface Task {
   id: string;
   name: string;
   category?: string;
+  description?: string; // link or note - auto-opens on task start
   plannedDuration?: number; // minutes
   dates: string[]; // YYYY-MM-DD
   startHour?: number; // 0-24

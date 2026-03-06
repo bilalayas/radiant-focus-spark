@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { format, getDaysInMonth, addMonths, subMonths } from 'date-fns';
-import { Plus, Trash2, List, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Plus, Trash2, List, ChevronLeft, ChevronRight, Search, ClipboardList, ExternalLink } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useTemplates, TaskTemplate } from '@/hooks/useTemplates';
+import { useTests } from '@/hooks/useTests';
 import { Task } from '@/types';
 import { getSubjectsForStudent, searchTopics } from '@/data/curriculum';
 import { Button } from '@/components/ui/button';
@@ -64,11 +65,12 @@ export default function PlanningPage() {
   const [selectedDay, setSelectedDay] = useState(now.getDate());
 
   const [fabOpen, setFabOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'menu' | 'new' | 'templates' | 'createTemplate' | 'addExisting'>('menu');
+  const [drawerMode, setDrawerMode] = useState<'menu' | 'new' | 'templates' | 'createTemplate' | 'addExisting' | 'test'>('menu');
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [newDuration, setNewDuration] = useState('');
   const [newStartHour, setNewStartHour] = useState<string>('');
+  const [newDescription, setNewDescription] = useState('');
   const [pendingHour, setPendingHour] = useState<number | null>(null);
   const [topicSearch, setTopicSearch] = useState('');
 
@@ -149,6 +151,7 @@ export default function PlanningPage() {
     addTask({
       name: newName.trim(),
       category: newCategory.trim() || undefined,
+      description: newDescription.trim() || undefined,
       plannedDuration: newDuration ? parseInt(newDuration) : undefined,
       startHour: newStartHour && newStartHour !== 'none' ? parseInt(newStartHour) : undefined,
       dates: [dateStr],
@@ -210,7 +213,7 @@ export default function PlanningPage() {
 
   const resetForm = () => {
     setNewName(''); setNewCategory(''); setNewDuration(''); setNewStartHour('');
-    setPendingHour(null); setTopicSearch('');
+    setPendingHour(null); setTopicSearch(''); setNewDescription('');
   };
 
   const handleDragStart = (taskId: string) => setDraggedTaskId(taskId);
@@ -389,6 +392,7 @@ export default function PlanningPage() {
               {drawerMode === 'menu' ? `Görev Ekle${pendingHour !== null ? ` — ${String(pendingHour).padStart(2, '0')}:00` : ''}` :
                drawerMode === 'new' ? 'Yeni Görev' :
                drawerMode === 'addExisting' ? 'Mevcut Görev Ekle' :
+               drawerMode === 'test' ? 'Test Ekle' :
                drawerMode === 'templates' ? 'Şablonlar' : 'Şablon Oluştur'}
             </DrawerTitle>
           </DrawerHeader>
@@ -426,20 +430,10 @@ export default function PlanningPage() {
                 <button onClick={() => setDrawerMode('createTemplate')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
                   🔖 Şablon Oluştur
                 </button>
-                {isYKS && subjects.length > 0 && !topicSearch && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Hızlı Ders Ekle</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {subjects.slice(0, 8).map(subject => (
-                        <button key={subject.name} onClick={() => {
-                          addTask({ name: subject.name, dates: [dateStr], category: subject.level, startHour: pendingHour ?? undefined });
-                          setFabOpen(false); setDrawerMode('menu'); setPendingHour(null);
-                        }} className="text-xs px-2.5 py-1.5 bg-accent text-accent-foreground rounded-lg hover:bg-primary/10 hover:text-primary transition-colors">
-                          {subject.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                {isYKS && (
+                  <button onClick={() => setDrawerMode('test')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                    <ClipboardList size={16} className="text-primary" /> Test Ekle
+                  </button>
                 )}
               </>
             )}
@@ -490,6 +484,7 @@ export default function PlanningPage() {
                   <Input placeholder="Kategori (opsiyonel)" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="rounded-xl" />
                 )}
                 <Input type="number" placeholder="Süre - dk (opsiyonel)" value={newDuration} onChange={e => setNewDuration(e.target.value)} className="rounded-xl" />
+                <Input placeholder="Link veya açıklama (opsiyonel)" value={newDescription} onChange={e => setNewDescription(e.target.value)} className="rounded-xl" />
                 {planningMode === 'timestamp' && (
                   <Select value={newStartHour} onValueChange={setNewStartHour}>
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Saat (opsiyonel)" /></SelectTrigger>
@@ -501,6 +496,10 @@ export default function PlanningPage() {
                 )}
                 <Button onClick={handleCreate} disabled={!newName.trim()} className="w-full rounded-xl">Oluştur</Button>
               </div>
+            )}
+
+            {drawerMode === 'test' && (
+              <TestEntryInline dateStr={dateStr} subjects={subjects} onDone={() => { setFabOpen(false); setDrawerMode('menu'); }} />
             )}
 
             {drawerMode === 'templates' && (
@@ -539,6 +538,7 @@ function TaskCard({ task, dateStr, isCompleted, onToggle, onDelete, compact }: {
   onToggle: () => void; onDelete: () => void; compact?: boolean;
 }) {
   const isTeacherTask = task.source === 'teacher';
+  const hasLink = task.description && (task.description.startsWith('http') || task.description.startsWith('www.'));
   return (
     <div className={`flex items-center gap-2.5 rounded-xl ${compact ? 'px-3 py-2.5' : 'px-4 py-3'} border shadow-sm w-full ${
       isTeacherTask ? 'bg-primary/5 border-primary/20' : 'bg-card border-border'
@@ -549,14 +549,59 @@ function TaskCard({ task, dateStr, isCompleted, onToggle, onDelete, compact }: {
           <p className={`text-sm font-medium truncate ${isCompleted ? 'line-through text-muted-foreground' : 'text-card-foreground'}`}>{task.name}</p>
           {isTeacherTask && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium shrink-0">Koç</span>}
         </div>
-        {(task.category || task.plannedDuration) && (
-          <div className="flex gap-2 mt-0.5">
+        {(task.category || task.plannedDuration || hasLink) && (
+          <div className="flex gap-2 mt-0.5 items-center">
             {task.category && <span className="text-[10px] text-muted-foreground">{task.category}</span>}
             {task.plannedDuration && <span className="text-[10px] text-muted-foreground">{task.plannedDuration} dk</span>}
+            {hasLink && (
+              <a href={task.description!.startsWith('http') ? task.description! : `https://${task.description}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80">
+                <ExternalLink size={10} />
+              </a>
+            )}
           </div>
         )}
       </div>
       <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"><Trash2 size={14} /></button>
+    </div>
+  );
+}
+
+// Compact test entry component
+function TestEntryInline({ dateStr, subjects, onDone }: { dateStr: string; subjects: { name: string; topics: string[] }[]; onDone: () => void }) {
+  const { user } = useApp();
+  const { addTest } = useTests();
+  const [name, setName] = useState('');
+  const [subject, setSubject] = useState('');
+  const [totalQ, setTotalQ] = useState('');
+
+  const handleCreate = async () => {
+    if (!name.trim() || !subject || !user) return;
+    await addTest({
+      user_id: user.id,
+      created_by: user.id,
+      name: name.trim(),
+      subject,
+      total_questions: parseInt(totalQ) || 0,
+      correct_count: 0, wrong_count: 0, blank_count: 0,
+      solve_duration: 0, analysis_duration: 0,
+      date: dateStr,
+      status: 'pending',
+    } as any);
+    toast('Test eklendi');
+    onDone();
+  };
+
+  return (
+    <div className="space-y-3">
+      <Input placeholder="Test adı *" value={name} onChange={e => setName(e.target.value)} className="rounded-xl" autoFocus />
+      <Select value={subject} onValueChange={setSubject}>
+        <SelectTrigger className="rounded-xl"><SelectValue placeholder="Ders seç *" /></SelectTrigger>
+        <SelectContent>
+          {subjects.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Input type="number" placeholder="Toplam soru sayısı" value={totalQ} onChange={e => setTotalQ(e.target.value)} className="rounded-xl" />
+      <Button onClick={handleCreate} disabled={!name.trim() || !subject} className="w-full rounded-xl">Test Ekle</Button>
     </div>
   );
 }
