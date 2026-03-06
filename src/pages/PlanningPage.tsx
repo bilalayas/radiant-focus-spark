@@ -605,5 +605,3 @@ function TestEntryInline({ dateStr, subjects, onDone }: { dateStr: string; subje
     </div>
   );
 }
-  );
-}
