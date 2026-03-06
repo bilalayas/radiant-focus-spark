@@ -18,6 +18,7 @@ import StudentDetailPage from "./pages/StudentDetailPage";
 import AdminPage from "./pages/AdminPage";
 import TestsPage from "./pages/TestsPage";
 import YouTubePage from "./pages/YouTubePage";
+import ResourcesPage from "./pages/ResourcesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -77,7 +78,7 @@ function AppRoutes() {
           : <Navigate to="/" replace />
       } />
       <Route path="/tests" element={
-        !isAdminMode
+        !isAdminMode && !isTeacherMode
           ? <AppLayout><TestsPage /></AppLayout>
           : <Navigate to="/" replace />
       } />
@@ -85,6 +86,9 @@ function AppRoutes() {
         !isAdminMode && !isTeacherMode
           ? <AppLayout><YouTubePage /></AppLayout>
           : <Navigate to="/" replace />
+      } />
+      <Route path="/resources" element={
+        <AppLayout><ResourcesPage /></AppLayout>
       } />
       <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
       <Route path="/student/:studentId" element={
