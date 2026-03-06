@@ -137,6 +137,39 @@ export type Database = {
         }
         Relationships: []
       }
+      resources: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          title: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          title: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       sessions: {
         Row: {
           created_at: string
@@ -221,6 +254,7 @@ export type Database = {
           category: string | null
           created_at: string
           dates: string[]
+          description: string | null
           id: string
           name: string
           planned_duration: number | null
@@ -232,6 +266,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           dates?: string[]
+          description?: string | null
           id?: string
           name: string
           planned_duration?: number | null
@@ -243,6 +278,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           dates?: string[]
+          description?: string | null
           id?: string
           name?: string
           planned_duration?: number | null
