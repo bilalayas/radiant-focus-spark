@@ -64,11 +64,12 @@ export default function PlanningPage() {
   const [selectedDay, setSelectedDay] = useState(now.getDate());
 
   const [fabOpen, setFabOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'menu' | 'new' | 'templates' | 'createTemplate' | 'addExisting'>('menu');
+  const [drawerMode, setDrawerMode] = useState<'menu' | 'new' | 'templates' | 'createTemplate' | 'addExisting' | 'test'>('menu');
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [newDuration, setNewDuration] = useState('');
   const [newStartHour, setNewStartHour] = useState<string>('');
+  const [newDescription, setNewDescription] = useState('');
   const [pendingHour, setPendingHour] = useState<number | null>(null);
   const [topicSearch, setTopicSearch] = useState('');
 
@@ -149,6 +150,7 @@ export default function PlanningPage() {
     addTask({
       name: newName.trim(),
       category: newCategory.trim() || undefined,
+      description: newDescription.trim() || undefined,
       plannedDuration: newDuration ? parseInt(newDuration) : undefined,
       startHour: newStartHour && newStartHour !== 'none' ? parseInt(newStartHour) : undefined,
       dates: [dateStr],
@@ -210,7 +212,7 @@ export default function PlanningPage() {
 
   const resetForm = () => {
     setNewName(''); setNewCategory(''); setNewDuration(''); setNewStartHour('');
-    setPendingHour(null); setTopicSearch('');
+    setPendingHour(null); setTopicSearch(''); setNewDescription('');
   };
 
   const handleDragStart = (taskId: string) => setDraggedTaskId(taskId);
@@ -426,21 +428,7 @@ export default function PlanningPage() {
                 <button onClick={() => setDrawerMode('createTemplate')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
                   🔖 Şablon Oluştur
                 </button>
-                {isYKS && subjects.length > 0 && !topicSearch && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Hızlı Ders Ekle</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {subjects.slice(0, 8).map(subject => (
-                        <button key={subject.name} onClick={() => {
-                          addTask({ name: subject.name, dates: [dateStr], category: subject.level, startHour: pendingHour ?? undefined });
-                          setFabOpen(false); setDrawerMode('menu'); setPendingHour(null);
-                        }} className="text-xs px-2.5 py-1.5 bg-accent text-accent-foreground rounded-lg hover:bg-primary/10 hover:text-primary transition-colors">
-                          {subject.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Quick subject section removed - use topic search or new task */}
               </>
             )}
 
