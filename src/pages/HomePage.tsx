@@ -283,6 +283,13 @@ export default function HomePage() {
 
   const handleStart = () => {
     if (!selectedTask) return;
+    // Auto-open link if task has a URL description
+    if (selectedTask.description) {
+      const desc = selectedTask.description;
+      if (desc.startsWith('http') || desc.startsWith('www.')) {
+        window.open(desc.startsWith('http') ? desc : `https://${desc}`, '_blank');
+      }
+    }
     timer.start(selectedTask.id, selectedTask.name);
   };
 
