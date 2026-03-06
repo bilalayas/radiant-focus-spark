@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { format, getDaysInMonth, addMonths, subMonths } from 'date-fns';
-import { Plus, Trash2, List, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Plus, Trash2, List, ChevronLeft, ChevronRight, Search, ClipboardList, ExternalLink } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useTemplates, TaskTemplate } from '@/hooks/useTemplates';
 import { Task } from '@/types';
@@ -391,6 +391,7 @@ export default function PlanningPage() {
               {drawerMode === 'menu' ? `Görev Ekle${pendingHour !== null ? ` — ${String(pendingHour).padStart(2, '0')}:00` : ''}` :
                drawerMode === 'new' ? 'Yeni Görev' :
                drawerMode === 'addExisting' ? 'Mevcut Görev Ekle' :
+               drawerMode === 'test' ? 'Test Ekle' :
                drawerMode === 'templates' ? 'Şablonlar' : 'Şablon Oluştur'}
             </DrawerTitle>
           </DrawerHeader>
@@ -428,7 +429,11 @@ export default function PlanningPage() {
                 <button onClick={() => setDrawerMode('createTemplate')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
                   🔖 Şablon Oluştur
                 </button>
-                {/* Quick subject section removed - use topic search or new task */}
+                {isYKS && (
+                  <button onClick={() => setDrawerMode('test')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                    <ClipboardList size={16} className="text-primary" /> Test Ekle
+                  </button>
+                )}
               </>
             )}
 
@@ -478,6 +483,7 @@ export default function PlanningPage() {
                   <Input placeholder="Kategori (opsiyonel)" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="rounded-xl" />
                 )}
                 <Input type="number" placeholder="Süre - dk (opsiyonel)" value={newDuration} onChange={e => setNewDuration(e.target.value)} className="rounded-xl" />
+                <Input placeholder="Link veya açıklama (opsiyonel)" value={newDescription} onChange={e => setNewDescription(e.target.value)} className="rounded-xl" />
                 {planningMode === 'timestamp' && (
                   <Select value={newStartHour} onValueChange={setNewStartHour}>
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Saat (opsiyonel)" /></SelectTrigger>
@@ -489,6 +495,10 @@ export default function PlanningPage() {
                 )}
                 <Button onClick={handleCreate} disabled={!newName.trim()} className="w-full rounded-xl">Oluştur</Button>
               </div>
+            )}
+
+            {drawerMode === 'test' && (
+              <TestEntryInline dateStr={dateStr} subjects={subjects} onDone={() => { setFabOpen(false); setDrawerMode('menu'); }} />
             )}
 
             {drawerMode === 'templates' && (
