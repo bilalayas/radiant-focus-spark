@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Timer, Calendar, BarChart3, Settings, Users, Shield, Youtube, BookOpen } from 'lucide-react';
+import { Timer, Calendar, BarChart3, Settings, Users, Shield, BookOpen, Layers } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export const BottomNav = () => {
@@ -26,8 +26,8 @@ export const BottomNav = () => {
     tabs = [
       { path: '/', icon: Timer },
       { path: '/planning', icon: Calendar },
-      { path: '/youtube', icon: Youtube },
       { path: '/analytics', icon: BarChart3 },
+      { path: '/helper-resources', icon: Layers },
       { path: '/settings', icon: Settings },
     ];
   }

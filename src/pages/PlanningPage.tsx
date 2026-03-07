@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { format, getDaysInMonth, addMonths, subMonths } from 'date-fns';
-import { Plus, Trash2, List, ChevronLeft, ChevronRight, Search, ClipboardList, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, ChevronRight, Search, ExternalLink, List, ClipboardList, Youtube, BookOpen } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useTemplates, TaskTemplate } from '@/hooks/useTemplates';
 import { useTests } from '@/hooks/useTests';
 import { Task } from '@/types';
 import { getSubjectsForStudent, searchTopics } from '@/data/curriculum';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle,
@@ -24,6 +26,14 @@ const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 const dayNames = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
+interface Resource {
+  id: string;
+  title: string;
+  description: string | null;
+  url: string | null;
+  category: string | null;
+}
+
 export default function PlanningPage() {
   const {
     isTaskCompleted, settings, toggleTaskCompletion, profile,
@@ -32,6 +42,7 @@ export default function PlanningPage() {
 
   const addTask = (task: Omit<Task, 'id'>) => { addTaskContext(task); };
   const { templates, addTemplate, deleteTemplate } = useTemplates();
+  const { tests } = useTests();
 
   // Undo state
   const [lastDeleted, setLastDeleted] = useState<Task | null>(null);
@@ -65,7 +76,11 @@ export default function PlanningPage() {
   const [selectedDay, setSelectedDay] = useState(now.getDate());
 
   const [fabOpen, setFabOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'menu' | 'new' | 'templates' | 'createTemplate' | 'addExisting' | 'test'>('menu');
+  const [drawerTab, setDrawerTab] = useState<'tasks' | 'templates' | 'resources'>('tasks');
+  const [taskSubMode, setTaskSubMode] = useState<'menu' | 'new' | 'existing'>('menu');
+  const [templateSubMode, setTemplateSubMode] = useState<'menu' | 'create' | 'use'>('menu');
+  const [resourceSubMode, setResourceSubMode] = useState<'menu' | 'admin' | 'youtube' | 'test'>('menu');
+
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [newDuration, setNewDuration] = useState('');
@@ -84,6 +99,14 @@ export default function PlanningPage() {
 
   const selectedDayRef = useRef<HTMLButtonElement>(null);
 
+  // Admin resources
+  const [adminResources, setAdminResources] = useState<Resource[]>([]);
+  useEffect(() => {
+    supabase.from('resources').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      setAdminResources((data as any[]) || []);
+    });
+  }, []);
+
   const totalDays = getDaysInMonth(new Date(selectedYear, selectedMonth));
   const selectedDate = new Date(selectedYear, selectedMonth, Math.min(selectedDay, totalDays));
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -93,6 +116,12 @@ export default function PlanningPage() {
   const studentField = profile?.student_field || null;
   const subjects = useMemo(() => getSubjectsForStudent(studentField), [studentField]);
   const topicResults = useMemo(() => searchTopics(topicSearch, studentField), [topicSearch, studentField]);
+
+  // YouTube tasks (tasks without dates, with YT: category)
+  const youtubeTasks = useMemo(() => tasks.filter(t => t.category?.startsWith('YT:') && !t.dates.includes(dateStr)), [tasks, dateStr]);
+
+  // Pending tests (can be added as tasks)
+  const pendingTests = useMemo(() => tests.filter(t => t.status === 'pending'), [tests]);
 
   useEffect(() => {
     const max = getDaysInMonth(new Date(selectedYear, selectedMonth));
@@ -127,7 +156,6 @@ export default function PlanningPage() {
     [dayTasks]
   );
 
-  // Sort: completed tasks at bottom
   const sortedDayTasks = useMemo(() => {
     const completed = dayTasks.filter(t => isTaskCompleted(t.id, dateStr));
     const pending = dayTasks.filter(t => !isTaskCompleted(t.id, dateStr));
@@ -140,6 +168,7 @@ export default function PlanningPage() {
     const oneWeekAgoStr = format(oneWeekAgo, 'yyyy-MM-dd');
     return tasks.filter(t => {
       if (t.dates.includes(dateStr)) return false;
+      if (t.category?.startsWith('YT:') && t.dates.length === 0) return false; // exclude unassigned YT tasks (shown separately)
       if (dateStr < oneWeekAgoStr) return true;
       const hasRecentOrFutureDates = t.dates.length === 0 || t.dates.some(d => d >= oneWeekAgoStr);
       return hasRecentOrFutureDates;
@@ -153,12 +182,11 @@ export default function PlanningPage() {
       category: newCategory.trim() || undefined,
       description: newDescription.trim() || undefined,
       plannedDuration: newDuration ? parseInt(newDuration) : undefined,
-      startHour: newStartHour && newStartHour !== 'none' ? parseInt(newStartHour) : undefined,
+      startHour: newStartHour && newStartHour !== 'none' ? parseInt(newStartHour) : (pendingHour ?? undefined),
       dates: [dateStr],
     });
     resetForm();
-    setFabOpen(false);
-    setDrawerMode('menu');
+    closeFab();
   };
 
   const handleCreateFromTopic = (topicName: string, subjectName: string) => {
@@ -169,46 +197,83 @@ export default function PlanningPage() {
       dates: [dateStr],
     });
     setTopicSearch('');
-    setFabOpen(false);
-    setDrawerMode('menu');
-    setPendingHour(null);
+    closeFab();
   };
 
   const handleCreateFromTemplate = (tpl: TaskTemplate) => {
-    addTask({ name: tpl.name, category: tpl.category, plannedDuration: tpl.plannedDuration, startHour: tpl.startHour, dates: [dateStr] });
-    setFabOpen(false);
-    setDrawerMode('menu');
+    addTask({ name: tpl.name, category: tpl.category, plannedDuration: tpl.plannedDuration, startHour: pendingHour ?? tpl.startHour, dates: [dateStr] });
+    closeFab();
   };
 
   const handleSaveTemplate = () => {
     if (!tplName.trim()) return;
     addTemplate({ name: tplName.trim(), category: tplCategory.trim() || undefined, plannedDuration: tplDuration ? parseInt(tplDuration) : undefined });
     setTplName(''); setTplCategory(''); setTplDuration('');
-    setDrawerMode('menu');
+    setTemplateSubMode('menu');
+    toast.success('Şablon kaydedildi');
   };
 
   const handleCreateAtHour = (hour: number) => {
     setPendingHour(hour);
     setNewStartHour(String(hour));
-    setDrawerMode('menu');
+    setDrawerTab('tasks');
+    setTaskSubMode('menu');
     setFabOpen(true);
   };
 
   const handleAddExistingAtHour = (hour: number) => {
     setPendingHour(hour);
-    setDrawerMode('addExisting');
+    setDrawerTab('tasks');
+    setTaskSubMode('existing');
     setFabOpen(true);
   };
 
   const handleAddExistingTask = (task: Task) => {
-    updateTask(task.id, { dates: [...task.dates, dateStr], startHour: pendingHour ?? undefined });
-    setFabOpen(false);
-    setDrawerMode('menu');
-    setPendingHour(null);
+    if (task.dates.includes(dateStr)) {
+      // Just update hour
+      updateTask(task.id, { startHour: pendingHour ?? undefined });
+    } else {
+      updateTask(task.id, { dates: [...task.dates, dateStr], startHour: pendingHour ?? undefined });
+    }
+    closeFab();
   };
 
-  const handleAddUnscheduledToHour = (task: Task, hour: number) => {
-    updateTask(task.id, { startHour: hour });
+  const handleAddYoutubeTaskToDay = (task: Task) => {
+    updateTask(task.id, { dates: [...task.dates, dateStr], startHour: pendingHour ?? undefined });
+    toast.success('Video güne eklendi');
+    closeFab();
+  };
+
+  const handleAddTestAsTask = (test: { name: string; subject: string }) => {
+    addTask({
+      name: `Test: ${test.name}`,
+      category: test.subject,
+      startHour: pendingHour ?? undefined,
+      dates: [dateStr],
+    });
+    toast.success('Test güne eklendi');
+    closeFab();
+  };
+
+  const handleAddResourceToDay = (resource: Resource) => {
+    addTask({
+      name: resource.title,
+      category: resource.category || 'Kaynak',
+      description: resource.url || resource.description || undefined,
+      startHour: pendingHour ?? undefined,
+      dates: [dateStr],
+    });
+    toast.success('Kaynak güne eklendi');
+    closeFab();
+  };
+
+  const closeFab = () => {
+    setFabOpen(false);
+    setDrawerTab('tasks');
+    setTaskSubMode('menu');
+    setTemplateSubMode('menu');
+    setResourceSubMode('menu');
+    setPendingHour(null);
   };
 
   const resetForm = () => {
@@ -325,7 +390,6 @@ export default function PlanningPage() {
       ) : (
         /* TIMESTAMP MODE */
         <div className="flex-1 overflow-y-auto scrollbar-hide">
-          {/* Show unscheduled tasks in timestamp mode */}
           {unscheduledTasks.length > 0 && (
             <div className="mb-3">
               <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wide">Zamanlanmamış</p>
@@ -379,153 +443,217 @@ export default function PlanningPage() {
       )}
 
       {/* FAB */}
-      <button onClick={() => { setDrawerMode('menu'); resetForm(); setFabOpen(true); }}
+      <button onClick={() => { resetForm(); setDrawerTab('tasks'); setTaskSubMode('menu'); setTemplateSubMode('menu'); setResourceSubMode('menu'); setFabOpen(true); }}
         className="fixed bottom-24 right-5 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:opacity-90 active:scale-95 transition-all z-10">
         <Plus size={22} />
       </button>
 
       {/* Drawer */}
-      <Drawer open={fabOpen} onOpenChange={(open) => { setFabOpen(open); if (!open) { setDrawerMode('menu'); setPendingHour(null); } }}>
-        <DrawerContent className="max-h-[70vh]">
-          <DrawerHeader>
+      <Drawer open={fabOpen} onOpenChange={(open) => { if (!open) closeFab(); else setFabOpen(true); }}>
+        <DrawerContent className="max-h-[75vh]">
+          <DrawerHeader className="pb-2">
             <DrawerTitle>
-              {drawerMode === 'menu' ? `Görev Ekle${pendingHour !== null ? ` — ${String(pendingHour).padStart(2, '0')}:00` : ''}` :
-               drawerMode === 'new' ? 'Yeni Görev' :
-               drawerMode === 'addExisting' ? 'Mevcut Görev Ekle' :
-               drawerMode === 'test' ? 'Test Ekle' :
-               drawerMode === 'templates' ? 'Şablonlar' : 'Şablon Oluştur'}
+              Görev Ekle{pendingHour !== null ? ` — ${String(pendingHour).padStart(2, '0')}:00` : ''}
             </DrawerTitle>
           </DrawerHeader>
-          <div className="px-4 pb-8 space-y-3 overflow-y-auto">
-            {drawerMode === 'menu' && (
-              <>
-                {/* Topic search for YKS users */}
-                {isYKS && (
-                  <div className="space-y-1.5">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-                      <Input value={topicSearch} onChange={e => setTopicSearch(e.target.value)} placeholder="Konu ara (ör: Türev, Paragraf...)" className="pl-8 rounded-xl text-sm" />
-                    </div>
-                    {topicSearch && topicResults.length > 0 && (
-                      <div className="max-h-40 overflow-y-auto space-y-0.5 bg-muted rounded-xl p-1.5">
-                        {topicResults.map(t => (
-                          <button key={t.id} onClick={() => handleCreateFromTopic(t.name, t.subject)}
-                            className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-accent transition-colors">
-                            {t.name} <span className="text-muted-foreground">– {t.subject}</span>
+          <div className="px-4 pb-8 overflow-y-auto">
+            <Tabs value={drawerTab} onValueChange={v => { setDrawerTab(v as any); setTaskSubMode('menu'); setTemplateSubMode('menu'); setResourceSubMode('menu'); }}>
+              <TabsList className="grid w-full grid-cols-3 h-9 rounded-xl mb-3">
+                <TabsTrigger value="tasks" className="text-xs rounded-lg">Görevler</TabsTrigger>
+                <TabsTrigger value="templates" className="text-xs rounded-lg">Şablonlar</TabsTrigger>
+                <TabsTrigger value="resources" className="text-xs rounded-lg">Kaynaklar</TabsTrigger>
+              </TabsList>
+
+              {/* ─── GÖREVLER TAB ─── */}
+              <TabsContent value="tasks" className="space-y-3 mt-0">
+                {taskSubMode === 'menu' && (
+                  <>
+                    {isYKS && (
+                      <div className="space-y-1.5">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+                          <Input value={topicSearch} onChange={e => setTopicSearch(e.target.value)} placeholder="Konu ara (ör: Türev, Paragraf...)" className="pl-8 rounded-xl text-sm" />
+                        </div>
+                        {topicSearch && topicResults.length > 0 && (
+                          <div className="max-h-40 overflow-y-auto space-y-0.5 bg-muted rounded-xl p-1.5">
+                            {topicResults.map(t => (
+                              <button key={t.id} onClick={() => handleCreateFromTopic(t.name, t.subject)}
+                                className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-accent transition-colors">
+                                {t.name} <span className="text-muted-foreground">– {t.subject}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <button onClick={() => setTaskSubMode('new')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      <Plus size={16} className="text-primary" /> Yeni Görev
+                    </button>
+                    <button onClick={() => setTaskSubMode('existing')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      📋 Mevcut Görevden Ekle
+                    </button>
+                  </>
+                )}
+
+                {taskSubMode === 'new' && (
+                  <div className="space-y-3">
+                    <Input placeholder="Görev adı *" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreate()} className="rounded-xl" autoFocus />
+                    {isYKS ? (
+                      <Select value={newCategory} onValueChange={setNewCategory}>
+                        <SelectTrigger className="rounded-xl"><SelectValue placeholder="Ders seç (opsiyonel)" /></SelectTrigger>
+                        <SelectContent>{subjects.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    ) : (
+                      <Input placeholder="Kategori (opsiyonel)" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="rounded-xl" />
+                    )}
+                    <Input type="number" placeholder="Süre - dk (opsiyonel)" value={newDuration} onChange={e => setNewDuration(e.target.value)} className="rounded-xl" />
+                    <Input placeholder="Link veya açıklama (opsiyonel)" value={newDescription} onChange={e => setNewDescription(e.target.value)} className="rounded-xl" />
+                    {planningMode === 'timestamp' && (
+                      <Select value={newStartHour} onValueChange={setNewStartHour}>
+                        <SelectTrigger className="rounded-xl"><SelectValue placeholder="Saat (opsiyonel)" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Zamansız</SelectItem>
+                          {hours.map(h => <SelectItem key={h} value={String(h)}>{String(h).padStart(2, '0')}:00</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button onClick={handleCreate} disabled={!newName.trim()} className="w-full rounded-xl">Oluştur</Button>
+                  </div>
+                )}
+
+                {taskSubMode === 'existing' && (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {unscheduledTasks.length === 0 && allOtherTasks.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">Eklenebilecek görev yok</p>
+                    )}
+                    {unscheduledTasks.length > 0 && (
+                      <>
+                        <p className="text-xs text-muted-foreground">Bu günün zamanlanmamış görevleri</p>
+                        {unscheduledTasks.map(task => (
+                          <button key={task.id} onClick={() => {
+                            if (pendingHour !== null) updateTask(task.id, { startHour: pendingHour });
+                            closeFab();
+                          }} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
+                            {task.name}
                           </button>
                         ))}
-                      </div>
+                      </>
+                    )}
+                    {allOtherTasks.length > 0 && (
+                      <>
+                        <p className="text-xs text-muted-foreground mt-2">Diğer görevler</p>
+                        {allOtherTasks.slice(0, 10).map(task => (
+                          <button key={task.id} onClick={() => handleAddExistingTask(task)} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
+                            {task.name}
+                            {task.category && <span className="ml-2 text-xs text-muted-foreground">• {task.category}</span>}
+                          </button>
+                        ))}
+                      </>
                     )}
                   </div>
                 )}
-                <button onClick={() => setDrawerMode('new')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
-                  <Plus size={16} className="text-primary" /> Yeni Görev
-                </button>
-                <button onClick={() => setDrawerMode('addExisting')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
-                  📋 Mevcut Görevden Ekle
-                </button>
-                <button onClick={() => setDrawerMode('templates')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
-                  ✨ Şablon Kullan
-                </button>
-                <button onClick={() => setDrawerMode('createTemplate')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
-                  🔖 Şablon Oluştur
-                </button>
-                {isYKS && (
-                  <button onClick={() => setDrawerMode('test')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
-                    <ClipboardList size={16} className="text-primary" /> Test Ekle
-                  </button>
-                )}
-              </>
-            )}
+              </TabsContent>
 
-            {drawerMode === 'addExisting' && (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {unscheduledTasks.length === 0 && allOtherTasks.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">Eklenebilecek görev yok</p>
-                )}
-                {unscheduledTasks.length > 0 && (
+              {/* ─── ŞABLONLAR TAB ─── */}
+              <TabsContent value="templates" className="space-y-3 mt-0">
+                {templateSubMode === 'menu' && (
                   <>
-                    <p className="text-xs text-muted-foreground">Bu günün zamanlanmamış görevleri</p>
-                    {unscheduledTasks.map(task => (
-                      <button key={task.id} onClick={() => {
-                        if (pendingHour !== null) updateTask(task.id, { startHour: pendingHour });
-                        setFabOpen(false); setDrawerMode('menu'); setPendingHour(null);
-                      }} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
-                        {task.name}
-                      </button>
-                    ))}
-                  </>
-                )}
-                {allOtherTasks.length > 0 && (
-                  <>
-                    <p className="text-xs text-muted-foreground mt-2">Diğer görevler</p>
-                    {allOtherTasks.slice(0, 10).map(task => (
-                      <button key={task.id} onClick={() => handleAddExistingTask(task)} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
-                        {task.name}
-                        {task.category && <span className="ml-2 text-xs text-muted-foreground">• {task.category}</span>}
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-
-            {drawerMode === 'new' && (
-              <div className="space-y-3">
-                <Input placeholder="Görev adı *" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreate()} className="rounded-xl" autoFocus />
-                {isYKS ? (
-                  <Select value={newCategory} onValueChange={setNewCategory}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Ders seç (opsiyonel)" /></SelectTrigger>
-                    <SelectContent>
-                      {subjects.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input placeholder="Kategori (opsiyonel)" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="rounded-xl" />
-                )}
-                <Input type="number" placeholder="Süre - dk (opsiyonel)" value={newDuration} onChange={e => setNewDuration(e.target.value)} className="rounded-xl" />
-                <Input placeholder="Link veya açıklama (opsiyonel)" value={newDescription} onChange={e => setNewDescription(e.target.value)} className="rounded-xl" />
-                {planningMode === 'timestamp' && (
-                  <Select value={newStartHour} onValueChange={setNewStartHour}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Saat (opsiyonel)" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Zamansız</SelectItem>
-                      {hours.map(h => <SelectItem key={h} value={String(h)}>{String(h).padStart(2, '0')}:00</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Button onClick={handleCreate} disabled={!newName.trim()} className="w-full rounded-xl">Oluştur</Button>
-              </div>
-            )}
-
-            {drawerMode === 'test' && (
-              <TestEntryInline dateStr={dateStr} subjects={subjects} onDone={() => { setFabOpen(false); setDrawerMode('menu'); }} />
-            )}
-
-            {drawerMode === 'templates' && (
-              <div className="space-y-2">
-                {templates.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Henüz şablon yok</p>}
-                {templates.map(tpl => (
-                  <div key={tpl.id} className="flex items-center gap-2">
-                    <button onClick={() => handleCreateFromTemplate(tpl)} className="flex-1 text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
-                      {tpl.name}
-                      {tpl.category && <span className="ml-2 text-xs text-muted-foreground">• {tpl.category}</span>}
-                      {tpl.plannedDuration && <span className="ml-2 text-xs text-muted-foreground">{tpl.plannedDuration}dk</span>}
+                    <button onClick={() => setTemplateSubMode('create')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      🔖 Yeni Şablon Oluştur
                     </button>
-                    <button onClick={() => deleteTemplate(tpl.id)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
+                    <button onClick={() => setTemplateSubMode('use')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      ✨ Şablon Kullan
+                    </button>
+                  </>
+                )}
 
-            {drawerMode === 'createTemplate' && (
-              <div className="space-y-3">
-                <Input placeholder="Şablon adı *" value={tplName} onChange={e => setTplName(e.target.value)} className="rounded-xl" autoFocus />
-                <Input placeholder="Kategori (opsiyonel)" value={tplCategory} onChange={e => setTplCategory(e.target.value)} className="rounded-xl" />
-                <Input type="number" placeholder="Süre - dk (opsiyonel)" value={tplDuration} onChange={e => setTplDuration(e.target.value)} className="rounded-xl" />
-                <Button onClick={handleSaveTemplate} disabled={!tplName.trim()} className="w-full rounded-xl">Kaydet</Button>
-              </div>
-            )}
+                {templateSubMode === 'create' && (
+                  <div className="space-y-3">
+                    <Input placeholder="Şablon adı *" value={tplName} onChange={e => setTplName(e.target.value)} className="rounded-xl" autoFocus />
+                    <Input placeholder="Kategori (opsiyonel)" value={tplCategory} onChange={e => setTplCategory(e.target.value)} className="rounded-xl" />
+                    <Input type="number" placeholder="Süre - dk (opsiyonel)" value={tplDuration} onChange={e => setTplDuration(e.target.value)} className="rounded-xl" />
+                    <Button onClick={handleSaveTemplate} disabled={!tplName.trim()} className="w-full rounded-xl">Kaydet</Button>
+                  </div>
+                )}
+
+                {templateSubMode === 'use' && (
+                  <div className="space-y-2">
+                    {templates.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Henüz şablon yok</p>}
+                    {templates.map(tpl => (
+                      <div key={tpl.id} className="flex items-center gap-2">
+                        <button onClick={() => handleCreateFromTemplate(tpl)} className="flex-1 text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
+                          {tpl.name}
+                          {tpl.category && <span className="ml-2 text-xs text-muted-foreground">• {tpl.category}</span>}
+                          {tpl.plannedDuration && <span className="ml-2 text-xs text-muted-foreground">{tpl.plannedDuration}dk</span>}
+                        </button>
+                        <button onClick={() => deleteTemplate(tpl.id)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ─── KAYNAKLAR TAB ─── */}
+              <TabsContent value="resources" className="space-y-3 mt-0">
+                {resourceSubMode === 'menu' && (
+                  <>
+                    <button onClick={() => setResourceSubMode('admin')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      <BookOpen size={16} className="text-primary" /> Admin Kaynakları
+                    </button>
+                    <button onClick={() => setResourceSubMode('youtube')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      <Youtube size={16} className="text-destructive" /> YouTube Video Ekle
+                    </button>
+                    <button onClick={() => setResourceSubMode('test')} className="flex items-center gap-3 w-full px-4 py-3 bg-card rounded-xl border border-border text-sm hover:bg-accent transition-colors">
+                      <ClipboardList size={16} className="text-primary" /> Test Ekle
+                    </button>
+                  </>
+                )}
+
+                {resourceSubMode === 'admin' && (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {adminResources.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Admin kaynağı yok</p>}
+                    {adminResources.map(res => (
+                      <button key={res.id} onClick={() => handleAddResourceToDay(res)} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
+                        {res.title}
+                        {res.category && <span className="ml-2 text-xs text-muted-foreground">• {res.category}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {resourceSubMode === 'youtube' && (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {youtubeTasks.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Tanımlı video yok. Yardımcı Kaynaklar'dan playlist ekleyin.
+                      </p>
+                    )}
+                    {youtubeTasks.map(task => (
+                      <button key={task.id} onClick={() => handleAddYoutubeTaskToDay(task)} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
+                        <span className="truncate block">{task.name}</span>
+                        {task.category && <span className="text-[10px] text-muted-foreground">{task.category.replace('YT:', '')}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {resourceSubMode === 'test' && (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {pendingTests.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Bekleyen test yok. Yardımcı Kaynaklar'dan test tanımlayın.
+                      </p>
+                    )}
+                    {pendingTests.map(test => (
+                      <button key={test.id} onClick={() => handleAddTestAsTask(test)} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
+                        {test.name}
+                        <span className="ml-2 text-xs text-muted-foreground">• {test.subject}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         </DrawerContent>
       </Drawer>
@@ -562,46 +690,6 @@ function TaskCard({ task, dateStr, isCompleted, onToggle, onDelete, compact }: {
         )}
       </div>
       <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"><Trash2 size={14} /></button>
-    </div>
-  );
-}
-
-// Compact test entry component
-function TestEntryInline({ dateStr, subjects, onDone }: { dateStr: string; subjects: { name: string; topics: string[] }[]; onDone: () => void }) {
-  const { user } = useApp();
-  const { addTest } = useTests();
-  const [name, setName] = useState('');
-  const [subject, setSubject] = useState('');
-  const [totalQ, setTotalQ] = useState('');
-
-  const handleCreate = async () => {
-    if (!name.trim() || !subject || !user) return;
-    await addTest({
-      user_id: user.id,
-      created_by: user.id,
-      name: name.trim(),
-      subject,
-      total_questions: parseInt(totalQ) || 0,
-      correct_count: 0, wrong_count: 0, blank_count: 0,
-      solve_duration: 0, analysis_duration: 0,
-      date: dateStr,
-      status: 'pending',
-    } as any);
-    toast('Test eklendi');
-    onDone();
-  };
-
-  return (
-    <div className="space-y-3">
-      <Input placeholder="Test adı *" value={name} onChange={e => setName(e.target.value)} className="rounded-xl" autoFocus />
-      <Select value={subject} onValueChange={setSubject}>
-        <SelectTrigger className="rounded-xl"><SelectValue placeholder="Ders seç *" /></SelectTrigger>
-        <SelectContent>
-          {subjects.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <Input type="number" placeholder="Toplam soru sayısı" value={totalQ} onChange={e => setTotalQ(e.target.value)} className="rounded-xl" />
-      <Button onClick={handleCreate} disabled={!name.trim() || !subject} className="w-full rounded-xl">Test Ekle</Button>
     </div>
   );
 }
