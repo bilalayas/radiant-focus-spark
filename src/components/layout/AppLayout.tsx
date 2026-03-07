@@ -40,7 +40,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const routes = useMemo(() => {
     if (isAdminMode) return ['/', '/resources', '/settings'];
     if (isTeacherMode) return ['/', '/settings'];
-    return ['/', '/planning', '/youtube', '/analytics', '/settings'];
+    return ['/', '/planning', '/analytics', '/helper-resources', '/settings'];
   }, [isAdminMode, isTeacherMode]);
 
   const currentIdx = routes.indexOf(location.pathname);

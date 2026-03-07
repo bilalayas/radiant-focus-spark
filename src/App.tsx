@@ -16,8 +16,7 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import StudentDetailPage from "./pages/StudentDetailPage";
 import AdminPage from "./pages/AdminPage";
-import TestsPage from "./pages/TestsPage";
-import YouTubePage from "./pages/YouTubePage";
+import HelperResourcesPage from "./pages/HelperResourcesPage";
 import ResourcesPage from "./pages/ResourcesPage";
 import NotFound from "./pages/NotFound";
 
@@ -77,14 +76,9 @@ function AppRoutes() {
           ? <AppLayout><AnalyticsPage /></AppLayout>
           : <Navigate to="/" replace />
       } />
-      <Route path="/tests" element={
+      <Route path="/helper-resources" element={
         !isAdminMode && !isTeacherMode
-          ? <AppLayout><TestsPage /></AppLayout>
-          : <Navigate to="/" replace />
-      } />
-      <Route path="/youtube" element={
-        !isAdminMode && !isTeacherMode
-          ? <AppLayout><YouTubePage /></AppLayout>
+          ? <AppLayout><HelperResourcesPage /></AppLayout>
           : <Navigate to="/" replace />
       } />
       <Route path="/resources" element={

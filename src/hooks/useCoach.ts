@@ -37,7 +37,6 @@ export function useCoach(user: User | null) {
       .or(`teacher_id.eq.${user.id},student_id.eq.${user.id}`);
 
     if (rels && rels.length > 0) {
-      // Fetch names for all related users
       const userIds = new Set<string>();
       rels.forEach(r => { userIds.add(r.teacher_id); userIds.add(r.student_id); });
       const { data: profiles } = await supabase
@@ -68,10 +67,30 @@ export function useCoach(user: User | null) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  /**
+   * Send a coach relationship request.
+   * Always ensures the user with teacher role goes into teacher_id.
+   * targetIsTeacher: true if the target user is the teacher
+   */
   const sendRequest = useCallback(async (targetUserId: string, targetIsTeacher: boolean) => {
     if (!user) return { error: 'Not logged in' };
+    
+    // Ensure correct assignment: teacher goes to teacher_id, student to student_id
     const teacherId = targetIsTeacher ? targetUserId : user.id;
     const studentId = targetIsTeacher ? user.id : targetUserId;
+    
+    // Prevent self-relationship
+    if (teacherId === studentId) return { error: 'Kendi kendinizle ilişki kuramazsınız' };
+    
+    // Check for existing relationship
+    const { data: existing } = await supabase
+      .from('coach_relationships')
+      .select('id')
+      .eq('teacher_id', teacherId)
+      .eq('student_id', studentId)
+      .limit(1);
+    
+    if (existing && existing.length > 0) return { error: 'Bu ilişki zaten mevcut' };
     
     const { error } = await supabase
       .from('coach_relationships')
