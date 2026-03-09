@@ -9,12 +9,14 @@ export interface Test {
   name: string;
   subject: string;
   topic?: string;
+  book_name?: string;
   correct_count: number;
   wrong_count: number;
   blank_count: number;
   total_questions: number;
   solve_duration: number;
   analysis_duration: number;
+  estimated_duration: number;
   date: string;
   status: string;
   created_at: string;
