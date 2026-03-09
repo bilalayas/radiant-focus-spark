@@ -67,7 +67,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchRef.current) return;
+    if (!touchRef.current || isSubRoute) return;
     const dx = touchRef.current.x - e.changedTouches[0].clientX;
     const dy = Math.abs(touchRef.current.y - e.changedTouches[0].clientY);
     const idx = routes.indexOf(location.pathname);
