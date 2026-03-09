@@ -244,14 +244,29 @@ export default function PlanningPage() {
     closeFab();
   };
 
-  const handleAddTestAsTask = (test: { name: string; subject: string }) => {
+  const handleAddTestAsTask = (test: { name: string; subject: string; book_name?: string; topic?: string; estimated_duration?: number }) => {
+    const parts = [test.subject];
+    if (test.book_name) parts.push(test.book_name);
+    if (test.topic) parts.push(test.topic);
+    const taskName = `Test: ${parts.join(' • ')}`;
+    const estDur = test.estimated_duration || undefined;
     addTask({
-      name: `Test: ${test.name}`,
+      name: taskName,
       category: test.subject,
+      plannedDuration: estDur,
       startHour: pendingHour ?? undefined,
       dates: [dateStr],
     });
-    toast.success('Test güne eklendi');
+    // Also add analysis task
+    if (estDur) {
+      addTask({
+        name: `Analiz: ${parts.join(' • ')}`,
+        category: test.subject,
+        startHour: undefined,
+        dates: [dateStr],
+      });
+    }
+    toast.success('Test ve analiz görevi eklendi');
     closeFab();
   };
 
