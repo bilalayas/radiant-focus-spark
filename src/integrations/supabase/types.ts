@@ -252,9 +252,11 @@ export type Database = {
       tasks: {
         Row: {
           category: string | null
+          chain_order: number | null
           created_at: string
           dates: string[]
           description: string | null
+          group_id: string | null
           id: string
           name: string
           planned_duration: number | null
@@ -264,9 +266,11 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          chain_order?: number | null
           created_at?: string
           dates?: string[]
           description?: string | null
+          group_id?: string | null
           id?: string
           name: string
           planned_duration?: number | null
@@ -276,9 +280,11 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          chain_order?: number | null
           created_at?: string
           dates?: string[]
           description?: string | null
+          group_id?: string | null
           id?: string
           name?: string
           planned_duration?: number | null
@@ -292,10 +298,12 @@ export type Database = {
         Row: {
           analysis_duration: number | null
           blank_count: number
+          book_name: string | null
           correct_count: number
           created_at: string
           created_by: string
           date: string
+          estimated_duration: number | null
           id: string
           name: string
           solve_duration: number | null
@@ -309,10 +317,12 @@ export type Database = {
         Insert: {
           analysis_duration?: number | null
           blank_count?: number
+          book_name?: string | null
           correct_count?: number
           created_at?: string
           created_by: string
           date: string
+          estimated_duration?: number | null
           id?: string
           name: string
           solve_duration?: number | null
@@ -326,10 +336,12 @@ export type Database = {
         Update: {
           analysis_duration?: number | null
           blank_count?: number
+          book_name?: string | null
           correct_count?: number
           created_at?: string
           created_by?: string
           date?: string
+          estimated_duration?: number | null
           id?: string
           name?: string
           solve_duration?: number | null
