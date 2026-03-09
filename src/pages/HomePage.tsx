@@ -315,6 +315,25 @@ export default function HomePage() {
     saveSessionAndStop();
     if (selectedTask) {
       setTaskCompleted(selectedTask.id, todayStr, true);
+      // Chained task: auto-start next in group
+      if (selectedTask.groupId) {
+        const groupTasks = todayTasks
+          .filter(t => t.groupId === selectedTask.groupId && t.id !== selectedTask.id && !isTaskCompleted(t.id, todayStr))
+          .sort((a, b) => (a.chainOrder || 0) - (b.chainOrder || 0));
+        if (groupTasks.length > 0) {
+          const nextTask = groupTasks[0];
+          timer.reset();
+          setSelectedTaskId(nextTask.id);
+          setShowSwipeFinish(false);
+          // Auto-open link
+          if (nextTask.description && (nextTask.description.startsWith('http') || nextTask.description.startsWith('www.'))) {
+            window.open(nextTask.description.startsWith('http') ? nextTask.description : `https://${nextTask.description}`, '_blank');
+          }
+          timer.start(nextTask.id, nextTask.name);
+          toast.success(`Zincirleme görev başlatıldı: ${nextTask.name}`);
+          return;
+        }
+      }
     }
     timer.reset();
     setShowSwipeFinish(false);
