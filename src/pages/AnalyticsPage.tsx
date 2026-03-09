@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useApp } from '@/context/AppContext';
+import { useTests } from '@/hooks/useTests';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DailyTimeline } from '@/components/DailyTimeline';
@@ -13,12 +14,43 @@ const COLORS = [
 
 export default function AnalyticsPage() {
   const { sessions, tasks, isTaskCompleted, getTasksForDate, getSessionsForDate } = useApp();
+  const { tests } = useTests();
   const [durationRange, setDurationRange] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todaySessions = getSessionsForDate(todayStr);
   const todayTasks = getTasksForDate(todayStr);
   const allTasksCompleted = todayTasks.length > 0 && todayTasks.every(t => isTaskCompleted(t.id, todayStr));
+
+  const completedTests = useMemo(() => tests.filter(t => t.status === 'completed'), [tests]);
+
+  // Test analytics
+  const testStats = useMemo(() => {
+    if (completedTests.length === 0) return null;
+    const totalCorrect = completedTests.reduce((s, t) => s + t.correct_count, 0);
+    const totalWrong = completedTests.reduce((s, t) => s + t.wrong_count, 0);
+    const totalBlank = completedTests.reduce((s, t) => s + t.blank_count, 0);
+    const totalQuestions = completedTests.reduce((s, t) => s + t.total_questions, 0);
+    const totalSolveDur = completedTests.reduce((s, t) => s + t.solve_duration, 0);
+    const totalAnalysisDur = completedTests.reduce((s, t) => s + t.analysis_duration, 0);
+    const totalNet = totalCorrect - totalWrong * 0.25;
+    return { totalCorrect, totalWrong, totalBlank, totalQuestions, totalSolveDur, totalAnalysisDur, totalNet, count: completedTests.length };
+  }, [completedTests]);
+
+  // Test per-subject breakdown
+  const testBySubject = useMemo(() => {
+    const map: Record<string, { correct: number; wrong: number; blank: number; total: number; net: number; count: number }> = {};
+    completedTests.forEach(t => {
+      if (!map[t.subject]) map[t.subject] = { correct: 0, wrong: 0, blank: 0, total: 0, net: 0, count: 0 };
+      map[t.subject].correct += t.correct_count;
+      map[t.subject].wrong += t.wrong_count;
+      map[t.subject].blank += t.blank_count;
+      map[t.subject].total += t.total_questions;
+      map[t.subject].net += t.correct_count - t.wrong_count * 0.25;
+      map[t.subject].count += 1;
+    });
+    return Object.entries(map).map(([subject, data]) => ({ subject, ...data }));
+  }, [completedTests]);
 
   const durationData = useMemo(() => {
     const today = new Date();
@@ -87,6 +119,8 @@ export default function AnalyticsPage() {
     return `${m}dk`;
   };
 
+  const net = (c: number, w: number) => (c - w * 0.25).toFixed(2);
+
   return (
     <div className="px-4 pt-6 pb-24">
       <h1 className="text-lg font-bold mb-4 text-foreground">Analiz</h1>
@@ -99,6 +133,7 @@ export default function AnalyticsPage() {
       <Tabs defaultValue="duration">
         <TabsList className="w-full rounded-xl mb-4">
           <TabsTrigger value="duration" className="flex-1 rounded-lg">Süre</TabsTrigger>
+          <TabsTrigger value="tests" className="flex-1 rounded-lg">Testler</TabsTrigger>
           <TabsTrigger value="prediction" className="flex-1 rounded-lg">Tahmin</TabsTrigger>
         </TabsList>
 
@@ -146,6 +181,118 @@ export default function AnalyticsPage() {
                 ))}
               </div>
             </div>
+          )}
+        </TabsContent>
+
+        {/* ─── TEST ANALYTICS ─── */}
+        <TabsContent value="tests" className="space-y-4">
+          {!testStats ? (
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground">Henüz tamamlanmış test yok.</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-card rounded-2xl p-3 border border-border shadow-sm">
+                  <p className="text-[10px] text-muted-foreground">Toplam Net</p>
+                  <p className="text-xl font-bold text-primary">{testStats.totalNet.toFixed(2)}</p>
+                </div>
+                <div className="bg-card rounded-2xl p-3 border border-border shadow-sm">
+                  <p className="text-[10px] text-muted-foreground">Toplam Test</p>
+                  <p className="text-xl font-bold text-foreground">{testStats.count}</p>
+                </div>
+                <div className="bg-card rounded-2xl p-3 border border-border shadow-sm">
+                  <p className="text-[10px] text-muted-foreground">Toplam Soru</p>
+                  <p className="text-xl font-bold text-foreground">{testStats.totalQuestions}</p>
+                </div>
+                <div className="bg-card rounded-2xl p-3 border border-border shadow-sm">
+                  <p className="text-[10px] text-muted-foreground">D / Y / B</p>
+                  <p className="text-sm font-bold text-foreground">
+                    <span className="text-primary">{testStats.totalCorrect}</span> / <span className="text-destructive">{testStats.totalWrong}</span> / <span className="text-muted-foreground">{testStats.totalBlank}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Success ratio */}
+              {testStats.totalQuestions > 0 && (
+                <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                  <p className="text-xs text-muted-foreground mb-2">Başarı Oranı</p>
+                  <div className="h-3 bg-muted rounded-full overflow-hidden flex">
+                    <div className="bg-primary h-full transition-all" style={{ width: `${(testStats.totalCorrect / testStats.totalQuestions) * 100}%` }} />
+                    <div className="bg-destructive h-full transition-all" style={{ width: `${(testStats.totalWrong / testStats.totalQuestions) * 100}%` }} />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-primary">%{Math.round((testStats.totalCorrect / testStats.totalQuestions) * 100)} Doğru</span>
+                    <span className="text-[10px] text-destructive">%{Math.round((testStats.totalWrong / testStats.totalQuestions) * 100)} Yanlış</span>
+                    <span className="text-[10px] text-muted-foreground">%{Math.round((testStats.totalBlank / testStats.totalQuestions) * 100)} Boş</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Duration stats */}
+              <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                <p className="text-xs text-muted-foreground mb-2">Süre Özeti</p>
+                <div className="flex justify-between">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Çözüm</p>
+                    <p className="text-sm font-bold text-foreground">{formatMin(testStats.totalSolveDur)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Analiz</p>
+                    <p className="text-sm font-bold text-foreground">{formatMin(testStats.totalAnalysisDur)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Toplam</p>
+                    <p className="text-sm font-bold text-foreground">{formatMin(testStats.totalSolveDur + testStats.totalAnalysisDur)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-subject breakdown */}
+              {testBySubject.length > 0 && (
+                <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                  <p className="text-xs text-muted-foreground mb-3">Ders Bazlı Analiz</p>
+                  <div className="space-y-2">
+                    {testBySubject.map((s, i) => (
+                      <div key={s.subject} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                          <span className="text-xs text-foreground truncate">{s.subject}</span>
+                          <span className="text-[10px] text-muted-foreground">({s.count})</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] text-muted-foreground">D:{s.correct} Y:{s.wrong} B:{s.blank}</span>
+                          <span className="text-xs font-bold text-primary">{s.net.toFixed(1)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Individual test results */}
+              <div className="bg-card rounded-2xl p-4 border border-border shadow-sm">
+                <p className="text-xs text-muted-foreground mb-3">Son Testler</p>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  {completedTests.slice(0, 20).map(test => (
+                    <div key={test.id} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-foreground truncate">{test.name}</p>
+                        <div className="flex gap-1.5">
+                          <span className="text-[10px] text-muted-foreground">{test.subject}</span>
+                          {test.book_name && <span className="text-[10px] text-muted-foreground">• {test.book_name}</span>}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right ml-2">
+                        <p className="text-xs font-bold text-primary">{net(test.correct_count, test.wrong_count)}</p>
+                        <p className="text-[9px] text-muted-foreground">{test.solve_duration}dk</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </TabsContent>
 

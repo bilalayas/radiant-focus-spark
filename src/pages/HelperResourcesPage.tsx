@@ -36,6 +36,9 @@ export default function HelperResourcesPage() {
   const { tests, addTest, updateTest, deleteTest } = useTests();
   const isAdmin = hasRole('admin');
 
+  // Global search
+  const [globalSearch, setGlobalSearch] = useState('');
+
   // YouTube state
   const [ytDialogOpen, setYtDialogOpen] = useState(false);
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -49,9 +52,12 @@ export default function HelperResourcesPage() {
   const [testSubject, setTestSubject] = useState('');
   const [testTopic, setTestTopic] = useState('');
   const [testTotalQ, setTestTotalQ] = useState('');
+  const [testBookName, setTestBookName] = useState('');
+  const [testEstDuration, setTestEstDuration] = useState('');
+  const [testCount, setTestCount] = useState('1');
+  const [testAnalysisDur, setTestAnalysisDur] = useState('');
   const [topicSearch, setTopicSearch] = useState('');
   const [testFilter, setTestFilter] = useState<'all' | 'pending' | 'completed'>('all');
-  const [testSearchQuery, setTestSearchQuery] = useState('');
 
   // Result entry
   const [resultDialog, setResultDialog] = useState<Test | null>(null);
@@ -74,8 +80,12 @@ export default function HelperResourcesPage() {
   const subjects = useMemo(() => getSubjectsForStudent(studentField), [studentField]);
   const topicResults = useMemo(() => searchTopics(topicSearch, studentField), [topicSearch, studentField]);
 
-  // YouTube tasks (stored without dates)
-  const youtubeTasks = useMemo(() => tasks.filter(t => t.category?.startsWith('YT:')), [tasks]);
+  // YouTube tasks (stored without dates) - sorted by position (ascending)
+  const youtubeTasks = useMemo(() => {
+    const yt = tasks.filter(t => t.category?.startsWith('YT:'));
+    return yt; // keep original insertion order
+  }, [tasks]);
+
   const playlists = useMemo(() => {
     const map: Record<string, typeof youtubeTasks> = {};
     youtubeTasks.forEach(t => {
@@ -83,19 +93,37 @@ export default function HelperResourcesPage() {
       if (!map[pl]) map[pl] = [];
       map[pl].push(t);
     });
+    // Sort each playlist by name (which contains position naturally from import)
     return Object.entries(map);
   }, [youtubeTasks]);
+
+  // Filter playlists by search
+  const filteredPlaylists = useMemo(() => {
+    if (!globalSearch) return playlists;
+    const q = globalSearch.toLowerCase();
+    return playlists.map(([cat, vTasks]) => {
+      const filtered = vTasks.filter(t => t.name.toLowerCase().includes(q) || cat.toLowerCase().includes(q));
+      return [cat, filtered] as [string, typeof vTasks];
+    }).filter(([, vTasks]) => vTasks.length > 0);
+  }, [playlists, globalSearch]);
 
   // Tests filtered
   const filteredTests = useMemo(() => {
     let result = tests;
     if (testFilter !== 'all') result = result.filter(t => t.status === testFilter);
-    if (testSearchQuery) {
-      const q = testSearchQuery.toLowerCase();
-      result = result.filter(t => t.name.toLowerCase().includes(q) || t.subject.toLowerCase().includes(q));
+    if (globalSearch) {
+      const q = globalSearch.toLowerCase();
+      result = result.filter(t => t.name.toLowerCase().includes(q) || t.subject.toLowerCase().includes(q) || (t.book_name || '').toLowerCase().includes(q));
     }
     return result;
-  }, [tests, testFilter, testSearchQuery]);
+  }, [tests, testFilter, globalSearch]);
+
+  // Filter resources by search
+  const filteredResources = useMemo(() => {
+    if (!globalSearch) return resources;
+    const q = globalSearch.toLowerCase();
+    return resources.filter(r => r.title.toLowerCase().includes(q) || (r.category || '').toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q));
+  }, [resources, globalSearch]);
 
   // Fetch resources
   const fetchResources = useCallback(async () => {
@@ -128,14 +156,16 @@ export default function HelperResourcesPage() {
   const handleImportAll = () => {
     const category = `YT:${playlistTitle}`;
     let added = 0;
-    videos.forEach(v => {
+    // Import in correct order (position ascending)
+    const sorted = [...videos].sort((a, b) => a.position - b.position);
+    sorted.forEach(v => {
       const exists = tasks.some(t => t.name === v.title && t.category === category);
       if (!exists) {
         addTask({
           name: v.title,
           category,
           description: `https://youtube.com/watch?v=${v.videoId}`,
-          dates: [], // No date assigned - user assigns later
+          dates: [],
         });
         added++;
       }
@@ -154,7 +184,7 @@ export default function HelperResourcesPage() {
       name: video.title,
       category,
       description: `https://youtube.com/watch?v=${video.videoId}`,
-      dates: [], // No date assigned
+      dates: [],
     });
     toast.success('Video sisteme eklendi');
   };
@@ -162,21 +192,32 @@ export default function HelperResourcesPage() {
   // Test handlers
   const handleCreateTest = async () => {
     if (!testName.trim() || !testSubject || !user) return;
-    await addTest({
-      user_id: user.id,
-      created_by: user.id,
-      name: testName.trim(),
-      subject: testSubject,
-      topic: testTopic || undefined,
-      total_questions: parseInt(testTotalQ) || 0,
-      correct_count: 0, wrong_count: 0, blank_count: 0,
-      solve_duration: 0, analysis_duration: 0,
-      date: format(new Date(), 'yyyy-MM-dd'),
-      status: 'pending',
-    } as any);
-    toast.success('Test oluşturuldu');
+    const count = Math.max(1, parseInt(testCount) || 1);
+    const estDur = parseInt(testEstDuration) || 0;
+    const analysisMins = parseInt(testAnalysisDur) || 0;
+
+    for (let i = 0; i < count; i++) {
+      const suffix = count > 1 ? ` (${i + 1})` : '';
+      await addTest({
+        user_id: user.id,
+        created_by: user.id,
+        name: testName.trim() + suffix,
+        subject: testSubject,
+        topic: testTopic || undefined,
+        book_name: testBookName.trim() || undefined,
+        total_questions: parseInt(testTotalQ) || 0,
+        correct_count: 0, wrong_count: 0, blank_count: 0,
+        solve_duration: 0, analysis_duration: 0,
+        estimated_duration: estDur,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        status: 'pending',
+      } as any);
+    }
+    toast.success(`${count} test oluşturuldu`);
     setTestDialogOpen(false);
-    setTestName(''); setTestSubject(''); setTestTopic(''); setTestTotalQ(''); setTopicSearch('');
+    setTestName(''); setTestSubject(''); setTestTopic(''); setTestTotalQ('');
+    setTestBookName(''); setTestEstDuration(''); setTestCount('1'); setTestAnalysisDur('');
+    setTopicSearch('');
   };
 
   const handleSaveResult = async () => {
@@ -220,7 +261,13 @@ export default function HelperResourcesPage() {
 
   return (
     <div className="px-4 pt-6 pb-24">
-      <h1 className="text-lg font-bold text-foreground mb-4">Yardımcı Kaynaklar</h1>
+      <h1 className="text-lg font-bold text-foreground mb-3">Yardımcı Kaynaklar</h1>
+
+      {/* Global Search */}
+      <div className="relative mb-3">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+        <Input value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} placeholder="Tüm kaynaklarda ara..." className="pl-8 h-9 rounded-xl text-sm" />
+      </div>
 
       <Tabs defaultValue="youtube" className="w-full">
         <TabsList className="grid w-full grid-cols-3 h-9 rounded-xl">
@@ -235,14 +282,13 @@ export default function HelperResourcesPage() {
             <Plus size={14} className="mr-1" /> Playlist / Video Ekle
           </Button>
 
-          {playlists.length === 0 ? (
+          {filteredPlaylists.length === 0 ? (
             <div className="text-center py-8">
               <Youtube size={32} className="mx-auto text-muted-foreground/30 mb-2" />
-              <p className="text-sm text-muted-foreground">Henüz tanımlanmış video yok</p>
-              <p className="text-[10px] text-muted-foreground/60">Playlist ekleyerek başlayın</p>
+              <p className="text-sm text-muted-foreground">{globalSearch ? 'Sonuç bulunamadı' : 'Henüz tanımlanmış video yok'}</p>
             </div>
           ) : (
-            playlists.map(([category, vTasks]) => (
+            filteredPlaylists.map(([category, vTasks]) => (
               <Collapsible key={category} defaultOpen>
                 <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-semibold text-foreground">
                   <span>{category.replace('YT:', '')}</span>
@@ -279,10 +325,6 @@ export default function HelperResourcesPage() {
           </Button>
 
           <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-              <Input value={testSearchQuery} onChange={e => setTestSearchQuery(e.target.value)} placeholder="Ara..." className="pl-8 h-8 rounded-xl text-xs" />
-            </div>
             <Select value={testFilter} onValueChange={v => setTestFilter(v as any)}>
               <SelectTrigger className="w-[100px] h-8 rounded-xl text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -294,7 +336,7 @@ export default function HelperResourcesPage() {
           </div>
 
           {filteredTests.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Henüz test yok</p>
+            <p className="text-sm text-muted-foreground text-center py-6">{globalSearch ? 'Sonuç bulunamadı' : 'Henüz test yok'}</p>
           ) : (
             <div className="space-y-2">
               {filteredTests.map(test => (
@@ -302,9 +344,11 @@ export default function HelperResourcesPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-foreground truncate block">{test.name}</span>
-                      <div className="flex gap-2 mt-0.5">
+                      <div className="flex flex-wrap gap-1.5 mt-0.5">
                         <span className="text-[10px] text-muted-foreground">{test.subject}</span>
+                        {test.book_name && <span className="text-[10px] text-muted-foreground">• 📖 {test.book_name}</span>}
                         {test.topic && <span className="text-[10px] text-muted-foreground">• {test.topic}</span>}
+                        {test.estimated_duration > 0 && <span className="text-[10px] text-muted-foreground">• ~{test.estimated_duration}dk</span>}
                       </div>
                       {test.status === 'completed' && (
                         <div className="flex gap-3 mt-1">
@@ -347,14 +391,14 @@ export default function HelperResourcesPage() {
             <div className="flex justify-center py-6">
               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : resources.length === 0 ? (
+          ) : filteredResources.length === 0 ? (
             <div className="text-center py-8">
               <BookOpen size={32} className="mx-auto text-muted-foreground/30 mb-2" />
-              <p className="text-sm text-muted-foreground">Henüz kaynak yok</p>
+              <p className="text-sm text-muted-foreground">{globalSearch ? 'Sonuç bulunamadı' : 'Henüz kaynak yok'}</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {resources.map(res => (
+              {filteredResources.map(res => (
                 <div key={res.id} className="bg-card rounded-xl border border-border shadow-sm p-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
@@ -382,7 +426,7 @@ export default function HelperResourcesPage() {
       <Dialog open={ytDialogOpen} onOpenChange={setYtDialogOpen}>
         <DialogContent className="rounded-2xl max-w-sm max-h-[80vh] flex flex-col">
           <DialogHeader><DialogTitle>YouTube Playlist Ekle</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto">
             <div className="flex gap-2">
               <Input value={playlistUrl} onChange={e => setPlaylistUrl(e.target.value)} placeholder="Playlist URL veya ID" className="rounded-xl text-sm" />
               <Button onClick={handleFetchPlaylist} disabled={ytLoading} className="rounded-xl shrink-0">{ytLoading ? '...' : 'Yükle'}</Button>
@@ -394,7 +438,7 @@ export default function HelperResourcesPage() {
                   <Button size="sm" variant="outline" className="h-7 text-[10px] rounded-lg" onClick={handleImportAll}>Tümünü Ekle</Button>
                 </div>
                 <div className="flex-1 overflow-y-auto max-h-[40vh] space-y-1">
-                  {videos.map(v => (
+                  {[...videos].sort((a, b) => a.position - b.position).map(v => (
                     <div key={v.videoId} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors">
                       <img src={v.thumbnail} alt="" className="w-10 h-7 rounded object-cover shrink-0" />
                       <span className="text-xs flex-1 truncate">{v.title}</span>
@@ -410,13 +454,14 @@ export default function HelperResourcesPage() {
 
       {/* Test Create Dialog */}
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
-        <DialogContent className="rounded-2xl max-w-sm">
+        <DialogContent className="rounded-2xl max-w-sm max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Yeni Test Tanımla</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <Input placeholder="Test adı *" value={testName} onChange={e => setTestName(e.target.value)} className="rounded-xl" autoFocus />
+            <Input placeholder="Kitap adı (opsiyonel)" value={testBookName} onChange={e => setTestBookName(e.target.value)} className="rounded-xl" />
             <Select value={testSubject} onValueChange={v => { setTestSubject(v); setTestTopic(''); }}>
               <SelectTrigger className="rounded-xl"><SelectValue placeholder="Ders seç *" /></SelectTrigger>
-              <SelectContent>{subjects.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+              <SelectContent className="max-h-48">{subjects.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
             </Select>
             {testSubject && (
               <>
@@ -437,7 +482,14 @@ export default function HelperResourcesPage() {
                 {testTopic && <div className="text-xs text-primary bg-primary/10 px-2 py-1 rounded-lg inline-block">Konu: {testTopic}</div>}
               </>
             )}
-            <Input type="number" placeholder="Toplam soru sayısı" value={testTotalQ} onChange={e => setTestTotalQ(e.target.value)} className="rounded-xl" />
+            <div className="grid grid-cols-2 gap-2">
+              <Input type="number" placeholder="Soru sayısı" value={testTotalQ} onChange={e => setTestTotalQ(e.target.value)} className="rounded-xl" />
+              <Input type="number" placeholder="Test adedi" value={testCount} onChange={e => setTestCount(e.target.value)} className="rounded-xl" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input type="number" placeholder="Tahmini süre (dk)" value={testEstDuration} onChange={e => setTestEstDuration(e.target.value)} className="rounded-xl" />
+              <Input type="number" placeholder="Analiz süresi (dk)" value={testAnalysisDur} onChange={e => setTestAnalysisDur(e.target.value)} className="rounded-xl" />
+            </div>
             <Button onClick={handleCreateTest} disabled={!testName.trim() || !testSubject} className="w-full rounded-xl">Oluştur</Button>
           </div>
         </DialogContent>
