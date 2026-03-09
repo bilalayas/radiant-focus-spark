@@ -661,8 +661,8 @@ export default function PlanningPage() {
                     )}
                     {pendingTests.map(test => (
                       <button key={test.id} onClick={() => handleAddTestAsTask(test)} className="w-full text-left px-3 py-2.5 bg-card rounded-xl text-sm hover:bg-accent transition-colors border border-border">
-                        {test.name}
-                        <span className="ml-2 text-xs text-muted-foreground">• {test.subject}</span>
+                        <span className="block truncate">{test.subject}{test.book_name ? ` • ${test.book_name}` : ''}{test.topic ? ` • ${test.topic}` : ''}</span>
+                        <span className="text-[10px] text-muted-foreground">{test.name}{test.estimated_duration ? ` • ~${test.estimated_duration}dk` : ''}</span>
                       </button>
                     ))}
                   </div>
