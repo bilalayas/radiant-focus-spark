@@ -7,6 +7,8 @@ export interface Task {
   dates: string[]; // YYYY-MM-DD
   startHour?: number; // 0-24
   source?: 'self' | 'teacher'; // who created this task
+  groupId?: string; // chain group id
+  chainOrder?: number; // order within chain
 }
 
 export interface Session {
