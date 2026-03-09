@@ -47,6 +47,9 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const direction = currentIdx >= prevRouteIdx ? 1 : -1;
   if (currentIdx !== -1) prevRouteIdx = currentIdx;
 
+  // Disable swipe when on a sub-route (e.g. /student/xxx)
+  const isSubRoute = currentIdx === -1;
+
   // Keyboard fix
   useEffect(() => {
     const viewport = window.visualViewport;
